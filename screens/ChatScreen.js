@@ -27,6 +27,20 @@ import {
   getDoc,
 } from 'firebase/firestore';
 import { AuthContext } from '../context/AuthContext'; // Ensure AuthContext is correctly set up
+import { Buffer } from 'buffer'; // Import Buffer for JWT decoding
+
+// Helper function to decode JWT and extract payload
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error('Failed to parse JWT:', e);
+    return null;
+  }
+};
 
 export default function ChatScreen({ route, navigation }) {
   const { chat } = route.params; // chat should contain chatId and name
@@ -34,6 +48,7 @@ export default function ChatScreen({ route, navigation }) {
   const [inputText, setInputText] = useState('');
   const [usersCache, setUsersCache] = useState({});
   const { userToken, loading, logout } = useContext(AuthContext); // Updated to use userToken
+  const [currentUserUid, setCurrentUserUid] = useState(null); // New state for UID
   const [loadingMessages, setLoadingMessages] = useState(true);
 
   useEffect(() => {
@@ -53,7 +68,18 @@ export default function ChatScreen({ route, navigation }) {
       return;
     }
 
-    console.log('Authenticated userToken:', userToken);
+    // Decode JWT to extract UID
+    const decodedToken = parseJwt(userToken);
+    if (decodedToken && decodedToken.uid) {
+      setCurrentUserUid(decodedToken.uid);
+      console.log('Extracted UID from token:', decodedToken.uid);
+    } else {
+      console.warn('Failed to extract UID from token');
+      Alert.alert('Authentication Error', 'Invalid authentication token.', [
+        { text: 'OK', onPress: () => navigation.replace('Login') },
+      ]);
+      return;
+    }
 
     // Reference to the messages subcollection in Firestore
     const messagesRef = collection(db, 'chats', chat.chatId, 'messages');
@@ -95,8 +121,8 @@ export default function ChatScreen({ route, navigation }) {
       return; // Prevent sending empty messages
     }
 
-    if (!userToken) {
-      console.log('userToken is not set');
+    if (!currentUserUid) {
+      console.log('currentUserUid is not set');
       Alert.alert('Error', 'You are not authenticated.');
       return;
     }
@@ -104,7 +130,7 @@ export default function ChatScreen({ route, navigation }) {
     try {
       const messagesRef = collection(db, 'chats', chat.chatId, 'messages');
       const newMessage = {
-        senderId: userToken, // Assuming userToken contains the UID
+        senderId: currentUserUid, // Use the extracted UID
         text: inputText.trim(),
         timestamp: serverTimestamp(),
       };
@@ -115,7 +141,7 @@ export default function ChatScreen({ route, navigation }) {
       const chatRef = doc(db, 'chats', chat.chatId);
       const lastMessage = {
         text: inputText.trim(),
-        senderId: userToken,
+        senderId: currentUserUid,
         timestamp: serverTimestamp(),
       };
       console.log('Updating lastMessage in Firestore:', lastMessage);
@@ -160,7 +186,7 @@ export default function ChatScreen({ route, navigation }) {
 
   // Component to render individual messages
   const MessageItem = ({ item }) => {
-    const isMyMessage = item.senderId === userToken;
+    const isMyMessage = item.senderId === currentUserUid;
     const [senderName, setSenderName] = useState('Loading...');
 
     useEffect(() => {

@@ -18,7 +18,7 @@ export default function SwiperScreen() {
     console.log('SwiperScreen useEffect triggered');
     const fetchProfiles = async () => {
       if (!userToken) {
-        console.log('No userToken available, cannot fetch profiles');
+        console.log('No userToken afirevailable, cannot fetch profiles');
         Alert.alert('Authentication Error', 'Please log in to view profiles.', [
           { text: 'OK', onPress: () => {} },
         ]);
