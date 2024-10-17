@@ -1,68 +1,63 @@
+// context/AuthContext.js
+
 import React, { createContext, useState, useEffect } from 'react';
-import { Alert } from 'react-native';
-import { auth } from '../firebaseConfig';
-import * as SecureStore from 'expo-secure-store';
-import axiosInstance from '../api/axiosInstance';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import eventEmitter from '../eventEmitter'; // Import the event emitter
 
-
-
-
-// Create AuthContext
 export const AuthContext = createContext();
 
-// AuthProvider Component
 export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [loading, setLoading] = useState(true);
-  
 
-  // Load token from SecureStore when app starts
+  // Load token from AsyncStorage when the app starts
   useEffect(() => {
     const loadToken = async () => {
       try {
-        const token = await SecureStore.getItemAsync('userToken');
-        if (token) {
-          setUserToken(token);
-          axiosInstance.defaults.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (error) {
-        console.error('Error loading token:', error);
-      } finally {
-        setLoading(false);
+        const token = await AsyncStorage.getItem('userToken');
+        setUserToken(token);
+      } catch (e) {
+        console.error('Failed to load token', e);
       }
+      setLoading(false);
+    };
+    loadToken();
+
+    // Listen for logout event
+    const handleLogout = () => {
+      logout();
     };
 
-    loadToken();
+    eventEmitter.on('logout', handleLogout);
+
+    // Clean up the event listener on unmount
+    return () => {
+      eventEmitter.off('logout', handleLogout);
+    };
   }, []);
 
-  // Login function
-  const login = async (email, password) => {
+  // Function to handle login
+  const login = async (token) => {
+    setLoading(true);
     try {
-      const response = await axiosInstance.post('/login', { email, password });
-      const { token } = response.data;
-
-      if (token) {
-        await SecureStore.setItemAsync('userToken', token);
-        setUserToken(token);
-        axiosInstance.defaults.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('Login Failed', error.response?.data?.error || 'An error occurred during login.');
-      throw error;
+      await AsyncStorage.setItem('userToken', token);
+      setUserToken(token);
+    } catch (e) {
+      console.error('Failed to save token', e);
     }
+    setLoading(false);
   };
 
-  // Logout function
+  // Function to handle logout
   const logout = async () => {
+    setLoading(true);
     try {
-      await SecureStore.deleteItemAsync('userToken');
+      await AsyncStorage.removeItem('userToken');
       setUserToken(null);
-      delete axiosInstance.defaults.headers.Authorization;
-    } catch (error) {
-      console.error('Logout error:', error);
-      Alert.alert('Logout Failed', 'An error occurred during logout.');
+    } catch (e) {
+      console.error('Failed to remove token', e);
     }
+    setLoading(false);
   };
 
   return (

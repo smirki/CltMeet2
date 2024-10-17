@@ -3,6 +3,8 @@
 # dependencies
 node_modules/
 
+output.txt
+
 images/
 .env
 .json
@@ -37,3 +39,5 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+backend/serviceAccount.json

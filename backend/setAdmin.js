@@ -1,6 +1,6 @@
 // setAdmin.js
 const admin = require('firebase-admin');
-const serviceAccount = require('./cltmeet-6bbce-firebase-adminsdk-l2mh4-004310ce36.json'); // Update the path if necessary
+const serviceAccount = require('./serviceAccount.json'); // Update the path if necessary
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
