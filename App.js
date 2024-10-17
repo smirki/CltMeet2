@@ -66,7 +66,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <StripeProvider publishableKey="pk_test_51OfniJDtK57hwiI4CY9u4qzBlNrMLx4n86CmF7hSvmcDFwRJje8noHmnWaw8ESybJHZAXWQPvCBdq0Auu8Ey8lbP00fLL5NXkH">
+        <StripeProvider publishableKey="pk_test_51O4Rr9Fmp7WswC92UBPAsePoxs412SlcNlcxKstViNFh5BGp6MohkqGdO9hdK2PT4bClEeVwIuVfpvVdsA75fE3u003TIPyEGw">
           <NavigationContainer>
             <MatchesProvider>
               <AppNavigator />
