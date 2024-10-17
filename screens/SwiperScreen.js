@@ -42,7 +42,6 @@ export default function SwiperScreen() {
 
         if (!newProfiles || newProfiles.length === 0) {
           console.warn('No profiles received from API');
-          Alert.alert('No Profiles', 'No more profiles available.');
           setLoadingProfiles(false);
           return;
         }

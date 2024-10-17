@@ -451,8 +451,9 @@ const EventsScreen = () => {
                   <Button
                     title="Add New Payment Method"
                     onPress={() => {
+                      setModalVisible(false);
                       // Navigate to Payment Methods screen
-                      navigation.navigate('PaymentMethodScreen', {
+                      navigation.push('Payments', {
                         onPaymentMethodAdded: fetchPaymentMethods, // Refresh payment methods after adding
                       });
                     }}

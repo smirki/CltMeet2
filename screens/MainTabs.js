@@ -7,7 +7,7 @@ import SwiperScreen from './SwiperScreen';
 import MatchesScreen from './MatchesScreen';
 import ChatStack from './ChatStack';
 import ProfileScreen from './ProfileScreen';
-import AddPaymentMethodScreen from './AddPaymentMethodScreen';
+
 
 
 const Tab = createBottomTabNavigator();
@@ -55,7 +55,6 @@ export default function MainTabs() {
       <Tab.Screen name="Matches" component={MatchesScreen} />
       <Tab.Screen name="Chats" component={ChatStack} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
-      <Tab.Screen name="PaymentMethodScreen" component={AddPaymentMethodScreen} />
     </Tab.Navigator>
   );
 }

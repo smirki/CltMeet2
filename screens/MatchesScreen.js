@@ -97,6 +97,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F3DF',
     padding: 16,
+    paddingTop: 40,
   },
   section: {
     marginBottom: 24,
