@@ -1,6 +1,6 @@
 // App.js
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -12,6 +12,7 @@ import SignUpScreen from './screens/SignUpScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import MainTabs from './screens/MainTabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StripeProvider, useStripe } from '@stripe/stripe-react-native';
 
 const Stack = createNativeStackNavigator();
 
@@ -65,11 +66,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <NavigationContainer>
-          <MatchesProvider>
-            <AppNavigator />
-          </MatchesProvider>
-        </NavigationContainer>
+        <StripeProvider publishableKey="pk_test_51OfniJDtK57hwiI4CY9u4qzBlNrMLx4n86CmF7hSvmcDFwRJje8noHmnWaw8ESybJHZAXWQPvCBdq0Auu8Ey8lbP00fLL5NXkH">
+          <NavigationContainer>
+            <MatchesProvider>
+              <AppNavigator />
+            </MatchesProvider>
+          </NavigationContainer>
+        </StripeProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

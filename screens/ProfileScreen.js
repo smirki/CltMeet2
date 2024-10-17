@@ -5,6 +5,7 @@ import { View, Text, Button, StyleSheet, ActivityIndicator, Image, Alert, TextIn
 import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../api/axiosInstance';
 import * as ImagePicker from 'expo-image-picker';
+import { Tooltip } from 'react-native-elements';
 
 const ProfileScreen = () => {
   const { logout } = useContext(AuthContext);
@@ -48,6 +49,13 @@ const ProfileScreen = () => {
   };
 
   const handleImagePick = async () => {
+    // Request permission to access media library
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Permission to access media library is required!');
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -56,7 +64,25 @@ const ProfileScreen = () => {
     });
 
     if (!result.cancelled) {
-      setNewProfile({ ...newProfile, imageUrl: result.uri });
+      // Upload the selected image to the backend
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri: result.uri,
+        name: 'avatar.jpg',
+        type: 'image/jpeg',
+      });
+
+      try {
+        const uploadResponse = await axiosInstance.post('/uploadProfilePicture', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        setNewProfile({ ...newProfile, imageUrl: uploadResponse.data.imageUrl });
+      } catch (error) {
+        console.error('Error uploading image:', error.response?.data?.error || error.message);
+        Alert.alert('Error', error.response?.data?.error || 'Failed to upload image.');
+      }
     }
   };
 
@@ -72,7 +98,7 @@ const ProfileScreen = () => {
         neighborhood: newProfile.neighborhood,
       };
 
-      const response = await axiosInstance.put('/updateUserProfile', updatedProfile);
+      const response = await axiosInstance.post('/updateProfile', updatedProfile);
       setProfile(response.data);
       setEditing(false);
       Alert.alert('Profile Updated', 'Your profile has been updated successfully.');
@@ -81,6 +107,14 @@ const ProfileScreen = () => {
       Alert.alert('Error', error.response?.data?.error || 'Failed to update profile.');
     }
   };
+
+  const renderDisabledOption = (title, tooltip) => (
+    <Tooltip popover={<Text>{tooltip}</Text>} width={200}>
+      <View style={styles.disabledButton}>
+        <Text style={styles.disabledButtonText}>{title}</Text>
+      </View>
+    </Tooltip>
+  );
 
   if (loading) {
     return (
@@ -169,6 +203,12 @@ const ProfileScreen = () => {
             <Button title="Edit Profile" onPress={() => setEditing(true)} color="#FF3B30" />
             <Button title="Logout" onPress={logout} color="#666" />
           </View>
+
+          <View style={styles.disabledButtonsContainer}>
+            {renderDisabledOption('Search', 'Implement in a future release')}
+            {renderDisabledOption('Matches', 'Implement in a future release')}
+            {renderDisabledOption('Messages', 'Implement in a future release')}
+          </View>
         </>
       )}
     </ScrollView>
@@ -229,6 +269,23 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginTop: 20,
     width: '100%',
+  },
+  disabledButtonsContainer: {
+    marginTop: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  disabledButton: {
+    width: '100%',
+    padding: 15,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 10,
+    alignItems: 'center',
+    marginVertical: 5,
+  },
+  disabledButtonText: {
+    color: '#888',
+    fontSize: 18,
   },
 });
 

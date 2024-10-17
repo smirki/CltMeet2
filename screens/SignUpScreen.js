@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import axios from 'axios';
+import axiosInstance from '../api/axiosInstance'; // Import axiosInstance
 
 export default function SignUpScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -22,7 +22,7 @@ export default function SignUpScreen({ navigation }) {
 
   const handleSignUp = async () => {
     try {
-      await axios.post('http://10.0.0.21:3000/signup', {
+      await axiosInstance.post('/signup', { // Use axiosInstance here
         email,
         password,
         age,
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ff6347',
     marginBottom: 40,
-    fontFamily: 'Recoleta', // Unique font
+    fontFamily: 'Recoleta',
     textAlign: 'center',
   },
   errorText: {

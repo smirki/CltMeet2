@@ -2,102 +2,99 @@
 <html>
 <head>
     <title>Admin Interface</title>
-    <script>// admin.js
-        async function addEvent() {
-            const title = document.getElementById('eventTitle').value;
-            const description = document.getElementById('eventDescription').value;
-            const response = await fetch('/events', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('adminToken') // Use stored admin token
-                },
-                body: JSON.stringify({ title, description })
-            });
-            const result = await response.json();
-            alert(result.message || result.error);
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
         }
-        
-        async function deleteEvent() {
-            const eventId = document.getElementById('eventId').value;
-            const response = await fetch(`/events/${eventId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': 'Bearer ' + localStorage.getItem('adminToken')
-                }
-            });
-            const result = await response.json();
-            alert(result.message || result.error);
+        .hidden {
+            display: none;
         }
-        
-        async function makeAdmin() {
-            const email = document.getElementById('userEmail').value;
-            const response = await fetch('/makeAdmin', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('adminToken')
-                },
-                body: JSON.stringify({ email })
-            });
-            const result = await response.json();
-            alert(result.message || result.error);
+        .section {
+            margin-top: 30px;
         }
-        
-        async function deleteUser() {
-            const email = document.getElementById('userEmail').value;
-            const response = await fetch('/deleteUser', {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('adminToken')
-                },
-                body: JSON.stringify({ email })
-            });
-            const result = await response.json();
-            alert(result.message || result.error);
+        input, textarea, button {
+            display: block;
+            margin: 10px 0;
+            padding: 8px;
+            width: 300px;
         }
-        
-        // Implement a simple login mechanism for admin
-        async function adminLogin() {
-            const email = prompt('Enter admin email:');
-            const password = prompt('Enter admin password:');
-            const response = await fetch('/adminLogin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
-            });
-            const result = await response.json();
-            if (result.token) {
-                localStorage.setItem('adminToken', result.token);
-                alert('Admin login successful');
-            } else {
-                alert(result.error || 'Login failed');
-            }
+        .user-list, .event-list {
+            margin-top: 20px;
         }
-        
-        // Automatically prompt for admin login on page load
-        window.onload = () => {
-            if (!localStorage.getItem('adminToken')) {
-                adminLogin();
-            }
-        };
-        </script>
+        .user-item, .event-item {
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+    <script src="static/admin.js" defer></script>
 </head>
 <body>
     <h1>Admin Interface</h1>
-    <h2>Add Event</h2>
-    <input type="text" id="eventTitle" placeholder="Event Title"><br>
-    <textarea id="eventDescription" placeholder="Event Description"></textarea><br>
-    <button onclick="addEvent()">Add Event</button>
 
-    <h2>Delete Event</h2>
-    <input type="text" id="eventId" placeholder="Event ID"><br>
-    <button onclick="deleteEvent()">Delete Event</button>
+    <!-- Login Section -->
+    <div id="loginSection">
+        <h2>Admin Login</h2>
+        <form id="loginForm">
+            <input type="email" id="adminEmail" placeholder="Admin Email" required />
+            <input type="password" id="adminPassword" placeholder="Password" required />
+            <button type="submit">Login</button>
+        </form>
+        <div id="loginError" class="error"></div>
+    </div>
 
-    <h2>Manage Users</h2>
-    <input type="text" id="userEmail" placeholder="User Email"><br>
-    <button onclick="makeAdmin()">Make Admin</button>
-    <button onclick="deleteUser()">Delete User</button>
+    <!-- Admin Dashboard -->
+    <div id="adminDashboard" class="hidden">
+        <button id="logoutButton">Logout</button>
+
+        <!-- Add Event -->
+        <div class="section">
+            <h2>Add Event</h2>
+            <input type="text" id="eventTitle" placeholder="Event Title" required />
+            <textarea id="eventDescription" placeholder="Event Description" required></textarea>
+            <input type="text" id="eventLocationName" placeholder="Location Name" required />
+            <input type="number" id="eventLocationLatitude" placeholder="Location Latitude" required />
+            <input type="number" id="eventLocationLongitude" placeholder="Location Longitude" required />
+            <input type="number" id="eventTotalSlots" placeholder="Total Slots" required />
+            <input type="number" id="eventCost" placeholder="Cost ($)" required />
+            <input type="datetime-local" id="eventDate" placeholder="Event Date" required />
+            <input type="text" id="eventImageUrl" placeholder="Image URL (optional)" />
+            <button id="addEventButton">Add Event</button>
+        </div>
+
+        <!-- Delete Event -->
+        <div class="section">
+            <h2>Delete Event</h2>
+            <input type="text" id="deleteEventId" placeholder="Event ID" required />
+            <button id="deleteEventButton">Delete Event</button>
+        </div>
+
+        <!-- Manage Users -->
+        <div class="section">
+            <h2>Manage Users</h2>
+            <button id="refreshUsersButton">Refresh User List</button>
+            <div class="user-list" id="userList"></div>
+        </div>
+
+        <!-- Make User Admin -->
+        <div class="section">
+            <h2>Make User Admin</h2>
+            <input type="email" id="makeAdminEmail" placeholder="User Email" required />
+            <button id="makeAdminButton">Make Admin</button>
+        </div>
+
+        <!-- Delete User -->
+        <div class="section">
+            <h2>Delete User</h2>
+            <input type="email" id="deleteUserEmail" placeholder="User Email" required />
+            <button id="deleteUserButton">Delete User</button>
+        </div>
+
+        <!-- Additional Features -->
+        <!-- Add more sections here as needed -->
+    </div>
 </body>
 </html>

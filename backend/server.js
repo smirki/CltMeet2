@@ -11,6 +11,8 @@ require('dotenv').config(); // Load environment variables
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs');
+const Stripe = require('stripe'); // **New: Import Stripe**
+
 
 // Initialize Firebase Admin SDK with dynamic service account path
 const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH || './path/to/serviceAccountKey.json';
@@ -22,6 +24,9 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
+// Initialize Stripe with secret key from environment variables
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
 // Define storage for Multer
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -31,7 +36,6 @@ const imagesDir = path.join(__dirname, 'images');
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
 }
-
 
 const app = express();
 app.use(bodyParser.json());
@@ -85,6 +89,92 @@ function verifyAdmin(req, res, next) {
     });
 }
 
+app.get('/payment-methods', verifyToken, async (req, res) => {
+  const uid = req.uid;
+
+  try {
+    // Retrieve user's Stripe Customer ID and Payment Methods from Firestore
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeCustomerId = userData.stripeCustomerId;
+    const paymentMethodIds = userData.paymentMethods || [];
+
+    if (!stripeCustomerId) {
+      return res.status(400).send({ error: 'Stripe Customer ID not found' });
+    }
+
+    // Fetch Payment Methods from Stripe
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: stripeCustomerId,
+      type: 'card',
+    });
+
+    res.status(200).send({ paymentMethods: paymentMethods.data });
+  } catch (error) {
+    console.error('Error retrieving Payment Methods:', error);
+    res.status(500).send({ error: 'Error retrieving Payment Methods' });
+  }
+});
+
+
+// Endpoint to save Payment Method
+// Endpoint to save Payment Method
+// server.js (Backend)
+
+// Save Payment Method
+app.post('/save-payment-method', verifyToken, async (req, res) => {
+  const uid = req.uid;
+  const { paymentMethodId } = req.body;
+
+  // Validate paymentMethodId
+  if (!paymentMethodId || typeof paymentMethodId !== 'string') {
+    return res.status(400).send({ error: 'Payment Method ID must be a non-empty string.' });
+  }
+
+  try {
+    // Retrieve user's Stripe Customer ID from Firestore
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeCustomerId = userData.stripeCustomerId;
+
+    if (!stripeCustomerId) {
+      return res.status(400).send({ error: 'Stripe Customer ID not found' });
+    }
+
+    // Attach Payment Method to Stripe Customer
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: stripeCustomerId,
+    });
+
+    // Optionally, set as default payment method
+    await stripe.customers.update(stripeCustomerId, {
+      invoice_settings: {
+        default_payment_method: paymentMethodId,
+      },
+    });
+
+    // Store Payment Method ID in Firestore
+    await db.collection('users').doc(uid).update({
+      paymentMethods: admin.firestore.FieldValue.arrayUnion(paymentMethodId),
+    });
+
+    res.status(200).send({ message: 'Payment Method saved successfully' });
+  } catch (error) {
+    console.error('Error saving Payment Method:', error);
+    res.status(500).send({ error: 'Error saving Payment Method' });
+  }
+});
+
+
+
+
+
 // Upload Profile Picture
 app.post('/uploadProfilePicture', verifyToken, upload.single('avatar'), async (req, res) => {
     const uid = req.uid;
@@ -117,7 +207,6 @@ app.post('/uploadProfilePicture', verifyToken, upload.single('avatar'), async (r
       res.status(500).send({ error: 'Error uploading profile picture' });
     }
   });
-  
   
 
   app.post('/refresh-token', verifyToken, async (req, res) => {
@@ -205,17 +294,92 @@ app.delete('/deleteUser', verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+// Example Stripe Webhook Endpoint
+app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Webhook signature verification failed.', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object;
+      // Fulfill the purchase, e.g., register the user for the event
+      break;
+    // ... handle other event types
+    default:
+      console.log(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({ received: true });
+});
+
+app.delete('/payment-methods/:paymentMethodId', verifyToken, async (req, res) => {
+  const uid = req.uid;
+  const paymentMethodId = req.params.paymentMethodId;
+
+  if (!paymentMethodId) {
+    return res.status(400).send({ error: 'Payment Method ID is required.' });
+  }
+
+  try {
+    // Retrieve user's Stripe Customer ID from Firestore
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeCustomerId = userData.stripeCustomerId;
+
+    if (!stripeCustomerId) {
+      return res.status(400).send({ error: 'Stripe Customer ID not found' });
+    }
+
+    // Detach the payment method from the customer
+    await stripe.paymentMethods.detach(paymentMethodId);
+
+    // Remove the payment method ID from Firestore
+    await db.collection('users').doc(uid).update({
+      paymentMethods: admin.firestore.FieldValue.arrayRemove(paymentMethodId),
+    });
+
+    res.status(200).send({ message: 'Payment Method deleted successfully.' });
+  } catch (error) {
+    console.error('Error deleting payment method:', error);
+    res.status(500).send({ error: 'Error deleting payment method.' });
+  }
+});
+
+
+
 // Sign Up
+// Sign Up Endpoint
+// Sign Up Endpoint
 app.post('/signup', async (req, res) => {
   const { email, password, age, bio } = req.body;
 
   try {
+    // Create Firebase User
     const userRecord = await admin.auth().createUser({
       email,
       password,
     });
 
-    // Create user profile in Firestore
+    // Create Stripe Customer
+    const customer = await stripe.customers.create({
+      email: userRecord.email,
+      metadata: {
+        firebaseUid: userRecord.uid,
+      },
+    });
+
+    // Create user profile in Firestore with Stripe Customer ID
     await db.collection('users').doc(userRecord.uid).set({
       uid: userRecord.uid,
       email,
@@ -225,6 +389,8 @@ app.post('/signup', async (req, res) => {
       seenUsers: [],
       registeredEvents: {},
       imageUrl: 'https://via.placeholder.com/150', // Default avatar
+      stripeCustomerId: customer.id, // Store Stripe Customer ID
+      paymentMethods: [], // Initialize empty array for payment methods
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -234,7 +400,8 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-//Events
+
+// Events
 app.post('/registerForEvent', verifyToken, async (req, res) => {
     const uid = req.uid;
     const { eventId } = req.body;
@@ -307,52 +474,157 @@ app.post('/login', async (req, res) => {
   }
 });
 
+app.get('/incomingMatches', verifyToken, async (req, res) => {
+  const uid = req.uid;
+
+  try {
+    const incomingMatchRequestsSnapshot = await db.collection('matchRequests')
+      .where('to', '==', uid)
+      .get();
+
+    const incomingMatches = [];
+
+    for (const doc of incomingMatchRequestsSnapshot.docs) {
+      const data = doc.data();
+      const userDoc = await db.collection('users').doc(data.from).get();
+      const userData = userDoc.data();
+      incomingMatches.push({
+        requestId: doc.id,
+        user: userData,
+        type: data.type, // 'friend' or 'romantic'
+      });
+    }
+
+    res.status(200).send({ incomingMatches });
+  } catch (error) {
+    res.status(400).send({ error: error.message });
+  }
+});
+
 // Get Swipe Profiles
 app.get('/profiles', verifyToken, async (req, res) => {
-    const uid = req.uid;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const lastVisible = req.query.lastVisible || null;
-  
-    try {
-      const userDoc = await db.collection('users').doc(uid).get();
-      if (!userDoc.exists) {
-        return res.status(404).send({ error: 'User not found' });
-      }
-      const userData = userDoc.data();
-      const seenUsers = userData.seenUsers || [];
-  
-      // Combine current UID with seenUsers
-      const excludedUserIds = [uid, ...seenUsers.slice(0, 9)]; // Max 10 elements
-  
-      let query = db.collection('users').orderBy('uid').limit(pageSize);
-  
-      // Exclude current user and seen users
-      query = query.where('uid', 'not-in', excludedUserIds);
-  
-      if (lastVisible) {
-        const lastDoc = await db.collection('users').doc(lastVisible).get();
-        query = query.startAfter(lastDoc);
-      }
-  
-      const snapshot = await query.get();
-  
-      const profiles = [];
-      snapshot.forEach((doc) => {
-        profiles.push(doc.data());
-      });
-  
-      const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-  
-      res.status(200).send({
-        profiles,
-        lastVisible: lastDoc ? lastDoc.id : null,
-      });
-    } catch (error) {
-      console.error('Error fetching profiles:', error);
-      res.status(400).send({ error: error.message });
+  const uid = req.uid;
+  const pageSize = parseInt(req.query.pageSize) || 10;
+  const lastVisible = req.query.lastVisible || null;
+
+  try {
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
     }
-  });
-  
+    const userData = userDoc.data();
+    const seenUsers = userData.seenUsers || [];
+
+    // Adjust exclusion logic
+    let query = db.collection('users').orderBy('uid').limit(pageSize);
+
+    if (lastVisible) {
+      const lastDoc = await db.collection('users').doc(lastVisible).get();
+      query = query.startAfter(lastDoc);
+    }
+
+    const snapshot = await query.get();
+
+    const profiles = [];
+    snapshot.forEach((doc) => {
+      if (doc.id !== uid && !seenUsers.includes(doc.id)) {
+        profiles.push(doc.data());
+      }
+    });
+
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+
+    res.status(200).send({
+      profiles,
+      lastVisible: lastDoc ? lastDoc.id : null,
+    });
+  } catch (error) {
+    console.error('Error fetching profiles:', error);
+    res.status(400).send({ error: error.message });
+  }
+});
+
+// Make User Admin by UID
+app.post('/makeAdminByUID', verifyToken, verifyAdmin, async (req, res) => {
+  const { uid } = req.body;
+
+  if (!uid) {
+      return res.status(400).send({ error: 'User UID is required' });
+  }
+
+  try {
+      await admin.auth().setCustomUserClaims(uid, { admin: true });
+      res.status(200).send({ message: 'User has been promoted to admin.' });
+  } catch (error) {
+      console.error('Error promoting user to admin:', error);
+      res.status(500).send({ error: 'Error promoting user to admin' });
+  }
+});
+
+// Demote User Admin by UID
+app.post('/demoteUserByUID', verifyToken, verifyAdmin, async (req, res) => {
+  const { uid } = req.body;
+
+  if (!uid) {
+      return res.status(400).send({ error: 'User UID is required' });
+  }
+
+  try {
+      // Remove admin claims
+      await admin.auth().setCustomUserClaims(uid, { admin: false });
+      res.status(200).send({ message: 'User has been demoted from admin.' });
+  } catch (error) {
+      console.error('Error demoting user from admin:', error);
+      res.status(500).send({ error: 'Error demoting user from admin' });
+  }
+});
+
+
+// Get all users (Admin only)
+app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+      const listUsersResult = await admin.auth().listUsers(1000); // Adjust max results as needed
+      const users = listUsersResult.users.map(user => ({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || '',
+          admin: user.customClaims && user.customClaims.admin ? true : false,
+      }));
+      res.status(200).send({ users });
+  } catch (error) {
+      console.error('Error listing users:', error);
+      res.status(500).send({ error: 'Error fetching users' });
+  }
+});
+
+// Delete Post (Admin only)
+app.delete('/posts/:postId', verifyToken, verifyAdmin, async (req, res) => {
+  const postId = req.params.postId;
+
+  try {
+      await db.collection('posts').doc(postId).delete();
+      res.status(200).send({ message: 'Post deleted successfully.' });
+  } catch (error) {
+      console.error('Error deleting post:', error);
+      res.status(500).send({ error: 'Error deleting post' });
+  }
+});
+
+// Get User Reports (Admin only)
+app.get('/reports', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+      const reportsSnapshot = await db.collection('reports').get();
+      const reports = reportsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+      }));
+      res.status(200).send({ reports });
+  } catch (error) {
+      console.error('Error fetching reports:', error);
+      res.status(500).send({ error: 'Error fetching reports' });
+  }
+});
+
 
 // Update User Profile
 app.post('/updateProfile', verifyToken, async (req, res) => {
@@ -373,11 +645,34 @@ app.post('/updateProfile', verifyToken, async (req, res) => {
   }
 });
 
+// Get Analytics Data (Admin only)
+app.get('/analytics', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+      const usersSnapshot = await db.collection('users').get();
+      const eventsSnapshot = await db.collection('events').get();
+      const matchesSnapshot = await db.collection('matches').get();
+
+      const analytics = {
+          totalUsers: usersSnapshot.size,
+          totalEvents: eventsSnapshot.size,
+          totalMatches: matchesSnapshot.size,
+          // Add more metrics as needed
+      };
+
+      res.status(200).send({ analytics });
+  } catch (error) {
+      console.error('Error fetching analytics:', error);
+      res.status(500).send({ error: 'Error fetching analytics' });
+  }
+});
+
+
 // Get User Profile
 app.get('/getUserProfile', verifyToken, async (req, res) => {
   const uid = req.uid;
 
   try {
+    console.log(`Fetching profile for UID: ${uid}`);
     const userDoc = await db.collection('users').doc(uid).get();
     if (!userDoc.exists) {
       return res.status(404).send({ error: 'User not found' });
@@ -514,7 +809,7 @@ app.get('/outgoingMatches', verifyToken, async (req, res) => {
     }
   });
 
-  // Cancel Match Request
+// Cancel Match Request
 app.delete('/matchRequests/:requestId', verifyToken, async (req, res) => {
     const uid = req.uid;
     const requestId = req.params.requestId;
@@ -675,7 +970,6 @@ app.post('/chats/:chatId/messages', verifyToken, async (req, res) => {
       res.status(400).send({ error: error.message });
     }
   });
-  
 
 // Get Events
 app.get('/events', verifyToken, async (req, res) => {
@@ -692,15 +986,29 @@ app.get('/events', verifyToken, async (req, res) => {
   }
 });
 
-// Create Event (Admin only)
+// **New: Create Event with Enhanced Details (Admin only)**
 app.post('/events', verifyToken, verifyAdmin, async (req, res) => {
-  const { title, description } = req.body;
+  const { title, description, location, totalSlots, cost, date, imageUrl } = req.body;
+
+  // Validate required fields
+  if (!title || !description || !location || !totalSlots || !cost || !date) {
+    return res.status(400).send({ error: 'Missing required event fields.' });
+  }
 
   try {
     const eventRef = await db.collection('events').add({
       title,
       description,
+      location: {
+        name: location.name,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      },
+      totalSlots: totalSlots,
       registeredCount: 0,
+      cost: cost,
+      date: new Date(date), // Ensure date is stored as a timestamp
+      imageUrl: imageUrl || 'https://via.placeholder.com/150', // Default image if not provided
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -710,7 +1018,7 @@ app.post('/events', verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-// Delete Event (Admin only)
+// **New: Delete Event (Admin only)**
 app.delete('/events/:id', verifyToken, verifyAdmin, async (req, res) => {
   const eventId = req.params.id;
 
@@ -721,6 +1029,195 @@ app.delete('/events/:id', verifyToken, verifyAdmin, async (req, res) => {
     res.status(400).send({ error: error.message });
   }
 });
+
+app.post('/create-setup-intent', verifyToken, async (req, res) => {
+  const uid = req.uid;
+
+  try {
+    // Retrieve user's Stripe Customer ID from Firestore
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeCustomerId = userData.stripeCustomerId;
+
+    if (!stripeCustomerId) {
+      return res.status(400).send({ error: 'Stripe Customer ID not found' });
+    }
+
+    // Create Setup Intent
+    const setupIntent = await stripe.setupIntents.create({
+      customer: stripeCustomerId,
+      payment_method_types: ['card'],
+    });
+
+    res.status(200).send({ clientSecret: setupIntent.client_secret });
+  } catch (error) {
+    console.error('Error creating Setup Intent:', error);
+    res.status(500).send({ error: 'Error creating Setup Intent' });
+  }
+});
+
+// **New: Create Payment Intent (Authenticated Users)**
+// **New: Create Payment Intent (Authenticated Users)**
+// Create Payment Intent
+app.post('/create-payment-intent', verifyToken, async (req, res) => {
+  const { amount } = req.body; // Amount in cents
+
+  if (!amount || typeof amount !== 'number') {
+    return res.status(400).send({ error: 'Invalid or missing amount.' });
+  }
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount,
+      currency: 'usd',
+      payment_method_types: ['card'],
+    });
+
+    res.status(200).send({ clientSecret: paymentIntent.client_secret });
+  } catch (error) {
+    console.error('Error creating payment intent:', error);
+    res.status(500).send({ error: 'Error creating payment intent' });
+  }
+});
+
+
+
+// **New: Purchase Ticket (Handle Payment Confirmation and Event Registration)**
+// server.js (Backend)
+
+// Modify Purchase Ticket Endpoint
+// Purchase Ticket Endpoint
+// Purchase Ticket Endpoint
+app.post('/purchaseTicket', verifyToken, async (req, res) => {
+  const uid = req.uid;
+  const { eventId, paymentMethodId } = req.body;
+
+  if (!eventId) {
+    return res.status(400).send({ error: 'Missing eventId.' });
+  }
+
+  try {
+    // Retrieve user's Stripe Customer ID from Firestore
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeCustomerId = userData.stripeCustomerId;
+
+    if (!stripeCustomerId) {
+      return res.status(400).send({ error: 'Stripe Customer ID not found' });
+    }
+
+    // Retrieve Event Details
+    const eventDoc = await db.collection('events').doc(eventId).get();
+    if (!eventDoc.exists) {
+      return res.status(404).send({ error: 'Event not found' });
+    }
+    const eventData = eventDoc.data();
+
+    // Check if event has available slots
+    if (eventData.registeredCount >= eventData.totalSlots) {
+      return res.status(400).send({ error: 'Event is fully booked' });
+    }
+
+    // Calculate amount (assuming cost is in USD)
+    const amount = Math.round(eventData.cost * 100); // Convert to cents
+
+    // Create Payment Intent with saved Payment Method
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount,
+      currency: 'usd',
+      customer: stripeCustomerId,
+      payment_method: paymentMethodId,
+      off_session: true,
+      confirm: true,
+      metadata: {
+        eventId: eventId,
+        uid: uid,
+      },
+    });
+
+    if (paymentIntent.status === 'succeeded') {
+      // Register the user for the event
+      await db.collection('users').doc(uid).update({
+        [`registeredEvents.${eventId}`]: true,
+      });
+
+      await db.collection('events').doc(eventId).update({
+        registeredCount: admin.firestore.FieldValue.increment(1),
+      });
+
+      res.status(200).send({ message: 'Ticket purchased and registered for event successfully.' });
+    } else {
+      res.status(400).send({ error: 'Payment not successful.' });
+    }
+  } catch (error) {
+    if (error.code === 'authentication_required') {
+      // Payment requires authentication
+      res.status(400).send({ error: 'Authentication required for payment.' });
+    } else if (error.type === 'StripeCardError') {
+      // Handle specific Stripe card errors
+      res.status(400).send({ error: error.message });
+    } else {
+      console.error('Error purchasing ticket:', error);
+      res.status(500).send({ error: 'Error processing ticket purchase.' });
+    }
+  }
+});
+
+
+
+// server.js (Backend)
+
+app.post('/create-setup-intent', verifyToken, async (req, res) => {
+  const uid = req.uid;
+
+  try {
+    // Retrieve user's Stripe Customer ID from Firestore
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeCustomerId = userData.stripeCustomerId;
+
+    if (!stripeCustomerId) {
+      // Prompt user to create a Stripe Customer
+      // Optionally, create a Stripe Customer here
+      const customer = await stripe.customers.create({
+        email: userData.email,
+        metadata: {
+          firebaseUid: userData.uid,
+        },
+      });
+
+      // Update Firestore with Stripe Customer ID
+      await db.collection('users').doc(uid).update({
+        stripeCustomerId: customer.id,
+      });
+
+      // Assign the newly created customer ID
+      stripeCustomerId = customer.id;
+    }
+
+    // Create Setup Intent
+    const setupIntent = await stripe.setupIntents.create({
+      customer: stripeCustomerId,
+      payment_method_types: ['card'],
+    });
+
+    res.status(200).send({ clientSecret: setupIntent.client_secret });
+  } catch (error) {
+    console.error('Error creating Setup Intent:', error);
+    res.status(500).send({ error: 'Error creating Setup Intent' });
+  }
+});
+
+
 
 // Admin HTML interface
 app.get('/admin', (req, res) => {

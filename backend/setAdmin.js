@@ -6,7 +6,7 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-const email = 'admin@cltmeet.com'; // Replace with your admin user's email
+const email = 'a@gmail.com'; // Replace with your admin user's email
 
 admin
   .auth()
