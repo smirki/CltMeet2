@@ -1,6 +1,6 @@
 // ChatScreen.js
 
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,41 +25,28 @@ import {
   serverTimestamp,
   doc,
   getDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import { AuthContext } from '../context/AuthContext'; // Ensure AuthContext is correctly set up
-import { Buffer } from 'buffer'; // Import Buffer for JWT decoding
-
-// Helper function to decode JWT and extract payload
-const parseJwt = (token) => {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    console.error('Failed to parse JWT:', e);
-    return null;
-  }
-};
+import { jwtDecode } from 'jwt-decode'; // Import jwt-decode
 
 export default function ChatScreen({ route, navigation }) {
   const { chat } = route.params; // chat should contain chatId and name
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [usersCache, setUsersCache] = useState({});
-  const { userToken, loading, logout } = useContext(AuthContext); // Updated to use userToken
-  const [currentUserUid, setCurrentUserUid] = useState(null); // New state for UID
+  const { userToken, loading, logout } = useContext(AuthContext); // Use AuthContext
+  const [currentUserUid, setCurrentUserUid] = useState(null); // State for UID
   const [loadingMessages, setLoadingMessages] = useState(true);
+  const flatListRef = useRef(); // Reference to FlatList for scrolling
 
+  // Decode JWT to extract UID
   useEffect(() => {
-    console.log('ChatScreen useEffect triggered');
-    // Wait until authentication is loaded
     if (loading) {
       console.log('AuthContext is loading...');
       return;
     }
 
-    // If no authenticated user, alert and navigate to Login
     if (!userToken) {
       console.log('User not authenticated');
       Alert.alert('Authentication Error', 'You are not authenticated.', [
@@ -68,36 +55,55 @@ export default function ChatScreen({ route, navigation }) {
       return;
     }
 
-    // Decode JWT to extract UID
-    const decodedToken = parseJwt(userToken);
-    if (decodedToken && decodedToken.uid) {
-      setCurrentUserUid(decodedToken.uid);
-      console.log('Extracted UID from token:', decodedToken.uid);
-    } else {
-      console.warn('Failed to extract UID from token');
+    try {
+      const decodedToken = jwtDecode(userToken);
+      if (decodedToken && decodedToken.uid) {
+        setCurrentUserUid(decodedToken.uid);
+        console.log('Extracted UID from token:', decodedToken.uid);
+      } else {
+        console.warn('Failed to extract UID from token');
+        Alert.alert('Authentication Error', 'Invalid authentication token.', [
+          { text: 'OK', onPress: () => navigation.replace('Login') },
+        ]);
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to decode JWT:', error);
       Alert.alert('Authentication Error', 'Invalid authentication token.', [
         { text: 'OK', onPress: () => navigation.replace('Login') },
       ]);
-      return;
     }
+  }, [userToken, loading, navigation]);
 
-    // Reference to the messages subcollection in Firestore
+  // Set up Firestore listener for messages
+  useEffect(() => {
+    if (!currentUserUid) return;
+
+    console.log('Setting up Firestore listener for chat:', chat.chatId);
+
     const messagesRef = collection(db, 'chats', chat.chatId, 'messages');
-
-    // Create a query ordered by timestamp in ascending order
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
-    // Subscribe to real-time updates using onSnapshot
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
         console.log('Received new messages snapshot');
         const msgs = [];
         querySnapshot.forEach((doc) => {
-          msgs.push({ id: doc.id, ...doc.data() });
+          const data = doc.data();
+          // Validate senderId
+          if (data.senderId && data.text && data.timestamp) {
+            msgs.push({ id: doc.id, ...data });
+          } else {
+            console.warn('Invalid message data:', data);
+          }
         });
         setMessages(msgs);
         setLoadingMessages(false);
+        // Scroll to bottom when new messages arrive
+        if (flatListRef.current) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
       },
       (error) => {
         console.error('Error fetching messages:', error);
@@ -106,12 +112,11 @@ export default function ChatScreen({ route, navigation }) {
       }
     );
 
-    // Cleanup subscription on unmount
     return () => {
       console.log('Unsubscribing from messages snapshot');
       unsubscribe();
     };
-  }, [chat.chatId, userToken, loading, navigation]);
+  }, [chat.chatId, currentUserUid]);
 
   // Function to send a message
   const sendMessage = async () => {
@@ -130,14 +135,14 @@ export default function ChatScreen({ route, navigation }) {
     try {
       const messagesRef = collection(db, 'chats', chat.chatId, 'messages');
       const newMessage = {
-        senderId: currentUserUid, // Use the extracted UID
+        senderId: currentUserUid, // Ensure this is the UID
         text: inputText.trim(),
         timestamp: serverTimestamp(),
       };
       console.log('Adding message to Firestore:', newMessage);
       await addDoc(messagesRef, newMessage);
 
-      // Optionally, update the lastMessage field for displaying in chat lists
+      // Correctly update the lastMessage field in the chat document
       const chatRef = doc(db, 'chats', chat.chatId);
       const lastMessage = {
         text: inputText.trim(),
@@ -145,7 +150,7 @@ export default function ChatScreen({ route, navigation }) {
         timestamp: serverTimestamp(),
       };
       console.log('Updating lastMessage in Firestore:', lastMessage);
-      await addDoc(collection(db, 'chats', chat.chatId, 'lastMessage'), lastMessage);
+      await updateDoc(chatRef, { lastMessage });
 
       setInputText(''); // Clear input field after sending
       console.log('Message sent successfully');
@@ -185,24 +190,36 @@ export default function ChatScreen({ route, navigation }) {
   );
 
   // Component to render individual messages
-  const MessageItem = ({ item }) => {
+  const MessageItem = React.memo(({ item }) => {
     const isMyMessage = item.senderId === currentUserUid;
     const [senderName, setSenderName] = useState('Loading...');
 
     useEffect(() => {
       let isMounted = true; // To prevent state update on unmounted component
+
       const fetchName = async () => {
+        // Validate senderId format (assuming UIDs are alphanumeric and of specific length)
+        if (!item.senderId || item.senderId.length < 10) { // Adjust length as per your UID structure
+          console.warn('Invalid senderId detected:', item.senderId);
+          if (isMounted) {
+            setSenderName('Unknown');
+          }
+          return;
+        }
+
         const name = await getUserName(item.senderId);
         if (isMounted) {
           setSenderName(name);
           console.log('Sender name set to:', name);
         }
       };
+
       fetchName();
+
       return () => {
         isMounted = false;
       };
-    }, [item.senderId, getUserName]);
+    }, [item.senderId]);
 
     return (
       <View
@@ -217,7 +234,7 @@ export default function ChatScreen({ route, navigation }) {
         <Text style={styles.messageText}>{item.text}</Text>
       </View>
     );
-  };
+  });
 
   // Render each message item
   const renderItem = ({ item }) => <MessageItem item={item} />;
@@ -251,12 +268,14 @@ export default function ChatScreen({ route, navigation }) {
 
           {/* Messages List */}
           <FlatList
+            ref={flatListRef}
             data={messages}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             contentContainerStyle={styles.messagesContainer}
-            inverted // To show latest messages at the bottom
             showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => flatListRef.current.scrollToEnd({ animated: true })}
+            onLayout={() => flatListRef.current.scrollToEnd({ animated: true })}
           />
 
           {/* Message Input */}

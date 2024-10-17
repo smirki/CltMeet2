@@ -107,7 +107,11 @@ app.post('/uploadProfilePicture', verifyToken, upload.single('avatar'), async (r
         .jpeg({ quality: 80 }) // Compress the image
         .toFile(filepath);
   
+<<<<<<< HEAD
         const imageUrl = `${backend_url}/images/${filename}`;
+=======
+        const imageUrl = `http://1:3000/images/${filename}`;
+>>>>>>> f1e49d54726676d1612f2e71f6d5bfe63f8e9ceb
   
       // Update user's profile with new image URL
       await db.collection('users').doc(uid).update({

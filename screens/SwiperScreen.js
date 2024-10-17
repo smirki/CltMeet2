@@ -8,6 +8,8 @@ import axiosInstance from '../api/axiosInstance'; // Use axiosInstance
 import { AuthContext } from '../context/AuthContext'; // Import AuthContext
 
 export default function SwiperScreen() {
+    
+    
   const [profiles, setProfiles] = useState([]);
   const [lastVisible, setLastVisible] = useState(null);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
