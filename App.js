@@ -13,6 +13,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import MainTabs from './screens/MainTabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StripeProvider, useStripe } from '@stripe/stripe-react-native';
+import PaymentMethodScreen from './screens/AddPaymentMethodScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -58,6 +59,11 @@ const AppNavigator = () => {
           />
         </>
       )}
+      <Stack.Screen
+            name="Payments"
+            component={PaymentMethodScreen}
+            options={{ headerShown: false }}
+          />
     </Stack.Navigator>
   );
 };

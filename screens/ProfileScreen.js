@@ -220,12 +220,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    
   },
   container: {
     flexGrow: 1,
     padding: 20,
     backgroundColor: '#fff',
     alignItems: 'center',
+    paddingTop: 50,
   },
   avatar: {
     width: 150,
