@@ -16,6 +16,9 @@ const fs = require('fs');
 const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH || './path/to/serviceAccountKey.json';
 const serviceAccount = require(serviceAccountPath);
 
+require('dotenv').config();  // In backend entry point, e.g., server.js or app.js
+const backend_url = process.env.REACT_APP_SERVER_BASE_URL;
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -104,7 +107,7 @@ app.post('/uploadProfilePicture', verifyToken, upload.single('avatar'), async (r
         .jpeg({ quality: 80 }) // Compress the image
         .toFile(filepath);
   
-        const imageUrl = `http://192.168.1.143:3000/images/${filename}`;
+        const imageUrl = `${backend_url}/images/${filename}`;
   
       // Update user's profile with new image URL
       await db.collection('users').doc(uid).update({

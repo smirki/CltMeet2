@@ -1,13 +1,14 @@
 // api/axiosInstance.js
-
 import axios from 'axios';
 import { Alert } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import React from 'react';
 
+const backend_url = process.env.REACT_APP_SERVER_BASE_URL;
+
 // Create Axios instance
 const axiosInstance = axios.create({
-  baseURL: 'http://192.168.1.143:3000', // Ensure this matches SERVER_BASE_URL in .env
+  baseURL: `${backend_url}`, // Ensure this matches SERVER_BASE_URL in .env
   headers: {
     'Content-Type': 'application/json',
   },
