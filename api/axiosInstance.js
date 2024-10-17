@@ -7,7 +7,7 @@ import React from 'react';
 
 // Create Axios instance
 const axiosInstance = axios.create({
-  baseURL: 'http://192.168.1.143:3000', // Ensure this matches SERVER_BASE_URL in .env
+  baseURL: 'http://10.0.0.21:3000', // Ensure this matches SERVER_BASE_URL in .env
   headers: {
     'Content-Type': 'application/json',
   },

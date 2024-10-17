@@ -22,7 +22,7 @@ export default function SignUpScreen({ navigation }) {
 
   const handleSignUp = async () => {
     try {
-      await axios.post('http://192.168.1.143:3000/signup', {
+      await axios.post('http://10.0.0.21:3000/signup', {
         email,
         password,
         age,

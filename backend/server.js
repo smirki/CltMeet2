@@ -104,7 +104,7 @@ app.post('/uploadProfilePicture', verifyToken, upload.single('avatar'), async (r
         .jpeg({ quality: 80 }) // Compress the image
         .toFile(filepath);
   
-        const imageUrl = `http://192.168.1.143:3000/images/${filename}`;
+        const imageUrl = `http://1:3000/images/${filename}`;
   
       // Update user's profile with new image URL
       await db.collection('users').doc(uid).update({
