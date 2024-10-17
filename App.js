@@ -9,8 +9,9 @@ import { MatchesProvider } from './MatchesContext';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
-import ProfileScreen from './screens/ProfileScreen'; // Import ProfileScreen
-import MainTabs from './screens/MainTabs'; // Assuming you have MainTabs for authenticated users
+import ProfileScreen from './screens/ProfileScreen';
+import MainTabs from './screens/MainTabs';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Stack = createNativeStackNavigator();
 
@@ -63,13 +64,13 @@ const AppNavigator = () => {
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
-        <AuthProvider>
+      <AuthProvider>
+        <NavigationContainer>
           <MatchesProvider>
             <AppNavigator />
           </MatchesProvider>
-        </AuthProvider>
-      </NavigationContainer>
+        </NavigationContainer>
+      </AuthProvider>
     </GestureHandlerRootView>
   );
 }

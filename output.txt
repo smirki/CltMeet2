@@ -56,8 +56,9 @@ import { MatchesProvider } from './MatchesContext';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
-import ProfileScreen from './screens/ProfileScreen'; // Import ProfileScreen
-import MainTabs from './screens/MainTabs'; // Assuming you have MainTabs for authenticated users
+import ProfileScreen from './screens/ProfileScreen';
+import MainTabs from './screens/MainTabs';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Stack = createNativeStackNavigator();
 
@@ -110,16 +111,17 @@ const AppNavigator = () => {
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
-        <AuthProvider>
+      <AuthProvider>
+        <NavigationContainer>
           <MatchesProvider>
             <AppNavigator />
           </MatchesProvider>
-        </AuthProvider>
-      </NavigationContainer>
+        </NavigationContainer>
+      </AuthProvider>
     </GestureHandlerRootView>
   );
 }
+
 
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\app.json
 Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2
@@ -154,6 +156,18 @@ Contents:
     ]
   }
 }
+
+
+Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\eventEmitter.js
+Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2
+Contents:
+// eventEmitter.js
+
+import EventEmitter from 'eventemitter3';
+
+const eventEmitter = new EventEmitter();
+
+export default eventEmitter;
 
 
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\firebaseConfig.js
@@ -208,12 +222,11 @@ Contents:
 
 import axios from 'axios';
 import { Alert } from 'react-native';
-import { AuthContext } from '../context/AuthContext';
-import React from 'react';
+import eventEmitter from '../eventEmitter'; // Import the event emitter
 
 // Create Axios instance
 const axiosInstance = axios.create({
-  baseURL: 'http://192.168.1.143:3000', // Ensure this matches SERVER_BASE_URL in .env
+  baseURL: 'http://10.0.0.21:3000', // Ensure this matches SERVER_BASE_URL in .env
   headers: {
     'Content-Type': 'application/json',
   },
@@ -231,7 +244,7 @@ axiosInstance.interceptors.response.use(
           {
             text: 'OK',
             onPress: () => {
-              // You can implement a global logout mechanism here if needed
+              eventEmitter.emit('logout'); // Emit logout event
             },
           },
         ],
@@ -244,6 +257,7 @@ axiosInstance.interceptors.response.use(
 
 export default axiosInstance;
 
+
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\backend\.env
 Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\backend
 Contents:
@@ -251,7 +265,7 @@ PORT=3000
 JWT_SECRET=your_secure_jwt_secret_key
 FIREBASE_API_KEY=AIzaSyDvp-58BF6W92fTQ9fYOBpdKRhCY4qO-AQ  # Replace with your actual Firebase API Key
 SERVICE_ACCOUNT_PATH=./cltmeet-6bbce-firebase-adminsdk-l2mh4-004310ce36.json  # Update to the actual path of your Firebase service account
-SERVER_BASE_URL=http://192.168.1.143:3000
+SERVER_BASE_URL=http://10.0.0.21:3000
 
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\backend\admin.html
 Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\backend
@@ -452,8 +466,8 @@ Contents:
 {
   "type": "service_account",
   "project_id": "cltmeet-6bbce",
-  "private_key_id": "004310ce363d8cabe89106447a4a5bffc2fc01d4",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDr96PArauEFBYY\na/904NuTNybGUDF04PcKymXkZpellOpasCSNFo7wAWfj3ZFurrItXlXXLFnOG5W2\nmgXY0E25Z75lkZPxtvmsXKsv5DGOqAUqWFd1l5OlwmSl2k+rRJ5tNwORpCOK0/j4\nJAGotHj0ISWJrQ63EqOOZp5dBnCmV2KiAlnP3agB9ILfim/qkV93xj+Qk4EqJ1nk\nfgihKkqJlKxN69vA7ZglCzHHS1i69+LNVECILzJsiKBFmFaQelTGD8J69GK0NexH\nm3WOwzlA5049MOfJEGIb5gjPNKqZF+zNhXogei/x4dp1dPYZV51/XaW7lIECoV6+\nlzJGFqcXAgMBAAECggEABD07NxTMOTghELqWcfXnnwAQIB/ZvkYh5XqKbTgRqmyV\nLHwCSc8q8Jp/xE51JU/BeVN30kb7XXksWHmbzZFm7TSvBZj2109EvnGLkA37fPx3\nSWLADZVLNPLn/4L5JvW5iG0MQfwvoJyHhNmGdq0aAmtxpT7VARVCfz6pwrh02bsw\nwtCSifAN6XjR4EObErsT0e8MgccjN3+pZ7HaWcHhVaE6VfQ4XDqhixGOG2K0ngSI\njLdb702PqCC4ABokHq6qw8HqrpZwD047L1kEAn59mmaAXZqk5BvSJ5TaObHOVpVJ\n2hl2pJe9q5TWAmk4XwWLyoghHxlRczAabSjePjIMSQKBgQD8FvKdGhwstlTleL2M\nTjJDwIXCKzcDPQ3PHdMHVDZ5u6bbfAS9ZAZT/2j+O8+/n3TVQ84tzSKeTl7KHepN\ne9cIQaaB8lgKuF9SpPlJGubEHWSzLMoe1YWbTrNR83b4SV4u0mi4Wy95GtGzERHH\n++1I7SKBV0NPaFJP+B0Lo4ddtQKBgQDvoKuHHGD8JijHsHeSeh6BI98+UPgMyRLt\nGhhnoUlURVJZYRm7inZgHbZSfB3yTecShnfsPGK7Urs3/y+g2E+IKrj23rKxCqdP\nj9ltV+5zw764MpvQQLhz1MaO4H85cDQ80y5nePZbC30aioB/eZflqgKvb7mI68b3\nmRAkn3PRGwKBgF+xnluAw909QbDySpHuRSpu9Nema/WwwYM0AR2xHBTN5SNAStRS\nGgzc0dBgiBZnw4QJf0TnsBKEEXuMK5tKPXCG61w80KsRHi5TLcZQjfU4azeQ8xEN\nYPB5yZx8XVcXEseXW+VPyA+i3KOrASL3QTYDvqt2oriME2MD/pKiewpZAoGBAIFo\nAzmz2axR7zPn2KsBx/d1p9m/YDWHYPEqZoOQVklsJkyeY4cj/0lowk1JOeLgrykR\n9TFeavM+elyDMvVp24ltiPXIzjdNyYzt4j1qfxuFWjmfGwYb7YCgJ5qBIjOipJM0\neJroeCIy0hzDLyGoSJ9+cHTNoSSQL6MGxfEBK0qBAoGAaOSsmf/lYC3X5+l8gd3A\nkrlJp+ZBgb+gTNMf9pqYMvm+Ag6/FFi+OsTPPNAv2LgVJiywj1AnhMzO0YUx/K7K\nJ7Yf2hZCbC7HcBpKeb3QTisnJmLanNBaw394C1Hv+77pCZ6Ayve7rL/V0ZM/2bDB\nOAOofTzLyhxyFJ746BLOdug=\n-----END PRIVATE KEY-----\n",
+  "private_key_id": "c0d4bf00c88a28d9d7c0bb0cd6b53347b92587f9",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCx3HBuBP+HJCBX\ntCC+dEAg+3F0+ifS79pYTay9aTuclpw2u2Uf0Bdnvo4rDG0nRXOajCDvvqDicdzV\n+x4kzeplKDVojhzsT0crW/7m/jfc/zjmNbVV1Xl/+9ux+Fe2h6SaDFnapnbhl6W8\n4W16OTqJ2d7OMLJq28B+W2wQ+OOOqF3Mfa8P7re2VGj/LCfrDMo1i23UCjRb74lU\n3JqgxUbMO3ljhUOFFM2NhLHTAe/IUtPryu90Df8a/7gSOJmaYrZjA/1TztZLOEJZ\nELzn+3X2diaSPqumLZlulf/QcZxfzo0JcvYgMN/KTKTBUlZSQWaPCcxABtixH0Uu\nR2dshhY7AgMBAAECggEABBHca+5zvy6vPSwcyH7cemS5tq8d4V1ZP6zQ7dya+P0X\nqGDzvwPOvuVeiqAHXcV6Q06likoJ+f4YMYVER7W2gVR0NGcPRMQwbehclgIgwRvN\n74AwtnAWDnAMgBWddcqQx6QBglez+XsacPUvjhzOuOZiJMThSdsRaOxdz3c1rcck\n/Dibw0AWHqOJlivgKVb+qAA+5k0BFKITQQk+xjuv1y9yK+X3psjhCiXQTGTEFkQO\ne7qjE1ro682OUbKOK/nen6NNJIv1QwUSvRhXnboSx0Dr2Hza2D3ye9vto/WWeysm\njesVwB0N68sbCtzZUaj7iy/inWRmFCWjG71id9AToQKBgQD7NrDt8hvlT0/BTyz+\nsAGdzuIPyhhQg1lneOn2vqrbTApYt8vEo8UBwfk2BqufUf9F3l/sjs8VAIY8Y6S/\n1JsFOIE3jJoLaUIMedee3L5TNqYnQyfEsjQMo4jm2jyla2YB5dOuqTaKQhvwqVIE\nvd7dnQ9ombUbYl7Rq3ZDhoKogwKBgQC1P/eA4nECSGqz0th0elnoFS4qDI5eNMdR\nDyT/nE48Tbbwb+IiOclfhlz5RTl7/QcnHYv9+vZ8P3jHiY3upTN607vLMtcR79Wu\nBk1pwpGElG9BPIhv8zmdJXVRP2dIoYFPWA7pxzY2y69vIaXg5BcUWp6l8OsPomGG\nmb6q92a96QKBgQDyTi1YRZesldR6w5DF1CSq/zrDOg470oWwrUsWaZBJV83/BsDv\n2XsTl/J1rvdpA+Eylix18sVBH7FanE3zjfE8luTkHKUU7qD7gaZ9n7OgdezLoBXC\nvpQ/wJky+jtW3wGUQQbtyF9H+j4S4m6vDijiHzUWknPChx6oJDc9KIfsWwKBgGf6\ni2WgAk7Z9oS098JSkpNm2zX6QA5hXtrswj/1jphfyQxEU0lpN1IaxemmweSUcu8I\nr1AEEjWTQBnQmuEGWvMi1sAqqWE74qzUJsL+gPa7JNwa+vamZS322EfFBN6Q8Jrx\nHJUW2M40qa8qcXwDvg3KMutlu6QbdrF+L/jqt0FJAoGBAIFGXrwPY5Gf/Nmr3tiR\nqwVX6k791MGIuSN1M7XE14BT3CHbPCy85qMNT+zfzzQUCemaMTTP5GENh8aKw/Og\nud3p5YmZxMZRKi6bm0S6o5Ta//W/j1NNxMyuSKkNifko4fBidNjQBsyRrCoGIUj5\nlv+msEy+K0TMDCZ4IzFyDSFr\n-----END PRIVATE KEY-----\n",
   "client_email": "firebase-adminsdk-l2mh4@cltmeet-6bbce.iam.gserviceaccount.com",
   "client_id": "105827324448674268196",
   "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -462,7 +476,6 @@ Contents:
   "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-l2mh4%40cltmeet-6bbce.iam.gserviceaccount.com",
   "universe_domain": "googleapis.com"
 }
-
 
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\backend\server.js
 Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\backend
@@ -573,7 +586,7 @@ app.post('/uploadProfilePicture', verifyToken, upload.single('avatar'), async (r
         .jpeg({ quality: 80 }) // Compress the image
         .toFile(filepath);
   
-        const imageUrl = `http://192.168.1.143:3000/images/${filename}`;
+        const imageUrl = `http://1:3000/images/${filename}`;
   
       // Update user's profile with new image URL
       await db.collection('users').doc(uid).update({
@@ -1281,71 +1294,66 @@ Q9ÿ —éJ•^&ÜU’Z`×ñè×½!\J²jM²ug—•NvàÂŽÙð»óŒó:}éR­ÔS3ll ¬ŠÅØëQÐ:F1:É’®®g?*Tj*Ê
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\context\AuthContext.js
 Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\context
 Contents:
+// context/AuthContext.js
+
 import React, { createContext, useState, useEffect } from 'react';
-import { Alert } from 'react-native';
-import { auth } from '../firebaseConfig';
-import * as SecureStore from 'expo-secure-store';
-import axiosInstance from '../api/axiosInstance';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import eventEmitter from '../eventEmitter'; // Import the event emitter
 
-
-
-
-// Create AuthContext
 export const AuthContext = createContext();
 
-// AuthProvider Component
 export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [loading, setLoading] = useState(true);
-  
 
-  // Load token from SecureStore when app starts
+  // Load token from AsyncStorage when the app starts
   useEffect(() => {
     const loadToken = async () => {
       try {
-        const token = await SecureStore.getItemAsync('userToken');
-        if (token) {
-          setUserToken(token);
-          axiosInstance.defaults.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (error) {
-        console.error('Error loading token:', error);
-      } finally {
-        setLoading(false);
+        const token = await AsyncStorage.getItem('userToken');
+        setUserToken(token);
+      } catch (e) {
+        console.error('Failed to load token', e);
       }
+      setLoading(false);
+    };
+    loadToken();
+
+    // Listen for logout event
+    const handleLogout = () => {
+      logout();
     };
 
-    loadToken();
+    eventEmitter.on('logout', handleLogout);
+
+    // Clean up the event listener on unmount
+    return () => {
+      eventEmitter.off('logout', handleLogout);
+    };
   }, []);
 
-  // Login function
-  const login = async (email, password) => {
+  // Function to handle login
+  const login = async (token) => {
+    setLoading(true);
     try {
-      const response = await axiosInstance.post('/login', { email, password });
-      const { token } = response.data;
-
-      if (token) {
-        await SecureStore.setItemAsync('userToken', token);
-        setUserToken(token);
-        axiosInstance.defaults.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('Login Failed', error.response?.data?.error || 'An error occurred during login.');
-      throw error;
+      await AsyncStorage.setItem('userToken', token);
+      setUserToken(token);
+    } catch (e) {
+      console.error('Failed to save token', e);
     }
+    setLoading(false);
   };
 
-  // Logout function
+  // Function to handle logout
   const logout = async () => {
+    setLoading(true);
     try {
-      await SecureStore.deleteItemAsync('userToken');
+      await AsyncStorage.removeItem('userToken');
       setUserToken(null);
-      delete axiosInstance.defaults.headers.Authorization;
-    } catch (error) {
-      console.error('Logout error:', error);
-      Alert.alert('Logout Failed', 'An error occurred during logout.');
+    } catch (e) {
+      console.error('Failed to remove token', e);
     }
+    setLoading(false);
   };
 
   return (
@@ -1354,6 +1362,7 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
 
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\screens\ChatListScreen.js
 Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\screens
@@ -1502,7 +1511,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { AuthContext } from '../context/AuthContext'; // Ensure AuthContext is correctly set up
-import jwtDecode from 'jwt-decode'; // Import jwt-decode
+import { jwtDecode } from 'jwt-decode'; // Import jwt-decode
 
 export default function ChatScreen({ route, navigation }) {
   const { chat } = route.params; // chat should contain chatId and name
@@ -2621,117 +2630,194 @@ export default ProfileScreen;
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\screens\SignUpScreen.js
 Directory: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\screens
 Contents:
-// screens/SignUpScreen.js
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import axios from 'axios';
 
-import React, { useContext, useState } from 'react';
-import { View, TextInput, Button, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native';
-import { AuthContext } from '../context/AuthContext';
-
-const SignUpScreen = ({ navigation }) => {
-  const { signUp, loading } = useContext(AuthContext);
+export default function SignUpScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [age, setAge] = useState('');
   const [bio, setBio] = useState('');
+  const [error, setError] = useState('');
+  const buttonScale = new Animated.Value(1); // For button animation
 
-  const handleSignUp = () => {
-    if (email.trim() === '' || password.trim() === '') {
-      Alert.alert('Error', 'Please enter both email and password.');
-      return;
+  const handleSignUp = async () => {
+    try {
+      await axios.post('http://10.0.0.21:3000/signup', {
+        email,
+        password,
+        age,
+        bio,
+      });
+      Alert.alert('Success', 'Account created successfully');
+      navigation.goBack();
+    } catch (err) {
+      setError(err.response ? err.response.data.error : 'An error occurred');
     }
-    signUp(email, password, age, bio);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#FF3B30" />
-      </View>
-    );
-  }
+  const animateButton = () => {
+    Animated.sequence([
+      Animated.timing(buttonScale, {
+        toValue: 0.95,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonScale, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>CltMeet2 Sign Up</Text>
-      <TextInput
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        style={styles.input}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TextInput
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        style={styles.input}
-        secureTextEntry
-      />
-      <TextInput
-        placeholder="Age (optional)"
-        value={age}
-        onChangeText={setAge}
-        style={styles.input}
-        keyboardType="numeric"
-      />
-      <TextInput
-        placeholder="Bio (optional)"
-        value={bio}
-        onChangeText={setBio}
-        style={[styles.input, styles.textArea]}
-        multiline
-        numberOfLines={4}
-      />
-      <Button title="Sign Up" onPress={handleSignUp} />
-      <TouchableOpacity onPress={() => navigation.goBack()}>
-        <Text style={styles.link}>Already have an account? Login</Text>
-      </TouchableOpacity>
-    </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.inner}>
+        <Text style={styles.headerText}>Create Account</Text>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <TextInput
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          style={styles.input}
+          accessibilityLabel="Email Input"
+          accessibilityHint="Enter your email address"
+        />
+        <TextInput
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={styles.input}
+          accessibilityLabel="Password Input"
+          accessibilityHint="Enter your password"
+        />
+        <TextInput
+          placeholder="Age"
+          value={age}
+          onChangeText={setAge}
+          keyboardType="numeric"
+          style={styles.input}
+          accessibilityLabel="Age Input"
+          accessibilityHint="Enter your age"
+        />
+        <TextInput
+          placeholder="Bio"
+          value={bio}
+          onChangeText={setBio}
+          style={styles.input}
+          accessibilityLabel="Bio Input"
+          accessibilityHint="Enter a short bio"
+        />
+        <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+          <TouchableOpacity
+            style={styles.signUpButton}
+            onPress={() => {
+              animateButton();
+              handleSignUp();
+            }}
+            accessibilityLabel="Sign Up Button"
+            accessibilityHint="Tap to create your account"
+          >
+            <Text style={styles.buttonText}>Sign Up</Text>
+          </TouchableOpacity>
+        </Animated.View>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Back Button"
+          accessibilityHint="Go back to login screen"
+        >
+          <Text style={styles.backText}>Back to Login</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
     justifyContent: 'center',
+    backgroundColor: '#f8f8f8',
+    paddingHorizontal: 30,
   },
-  loaderContainer: {
+  inner: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  title: {
+  headerText: {
     fontSize: 28,
-    marginBottom: 30,
-    textAlign: 'center',
     fontWeight: 'bold',
-    color: '#FF3B30',
+    color: '#ff6347',
+    marginBottom: 40,
+    fontFamily: 'Recoleta', // Unique font
+    textAlign: 'center',
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 10,
+    fontSize: 14,
   },
   input: {
-    height: 50,
-    borderColor: '#ccc',
+    width: '100%',
+    padding: 15,
+    marginVertical: 10,
+    backgroundColor: '#fff',
+    borderRadius: 30,
     borderWidth: 1,
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    borderRadius: 8,
+    borderColor: '#ddd',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
   },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
+  signUpButton: {
+    width: '100%',
+    paddingVertical: 15,
+    backgroundColor: '#ff6347',
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  link: {
-    color: '#1E90FF',
-    marginTop: 15,
-    textAlign: 'center',
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  backButton: {
+    marginTop: 20,
+  },
+  backText: {
+    color: '#007aff',
     fontSize: 16,
   },
 });
-
-export default SignUpScreen;
 
 
 Path: c:\Users\Manav\Documents\Programming\Projects\CltMeet2\screens\SwiperScreen.js

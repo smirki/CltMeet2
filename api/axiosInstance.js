@@ -2,8 +2,8 @@
 
 import axios from 'axios';
 import { Alert } from 'react-native';
-import { AuthContext } from '../context/AuthContext';
-import React from 'react';
+import eventEmitter from '../eventEmitter';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Create Axios instance
 const axiosInstance = axios.create({
@@ -12,6 +12,20 @@ const axiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Request interceptor to add Authorization header
+axiosInstance.interceptors.request.use(
+  async (config) => {
+    const token = await AsyncStorage.getItem('userToken'); // Ensure the key matches where you stored the token
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 // Response interceptor to handle 401 errors
 axiosInstance.interceptors.response.use(
@@ -25,7 +39,7 @@ axiosInstance.interceptors.response.use(
           {
             text: 'OK',
             onPress: () => {
-              // You can implement a global logout mechanism here if needed
+              eventEmitter.emit('logout'); // Emit logout event
             },
           },
         ],
