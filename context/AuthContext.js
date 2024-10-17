@@ -4,6 +4,9 @@ import { auth } from '../firebaseConfig';
 import * as SecureStore from 'expo-secure-store';
 import axiosInstance from '../api/axiosInstance';
 
+
+
+
 // Create AuthContext
 export const AuthContext = createContext();
 
@@ -11,6 +14,7 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  
 
   // Load token from SecureStore when app starts
   useEffect(() => {
