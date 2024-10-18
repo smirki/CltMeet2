@@ -645,6 +645,64 @@ app.post('/updateProfile', verifyToken, async (req, res) => {
   }
 });
 
+
+app.get('/my-events', async (req, res) => {
+  const uid = req.uid;
+
+  try {
+    // Fetch the user's document based on uid
+    const userDoc = await db.collection('users').doc(uid).get();
+
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: 'User not found' });
+    }
+
+    const userData = userDoc.data();
+    const registeredEvents = userData.registeredEvents || {}; // Get registeredEvents as a map
+
+    // Extract the event UIDs (keys of the registeredEvents object)
+    const eventUids = Object.keys(registeredEvents);
+
+    if (eventUids.length === 0) {
+      return res.status(200).send({ events: [] }); // Return an empty array if no events are registered
+    }
+
+    // Query Firestore for all events whose event_id matches the UIDs from registeredEvents
+    const eventsRef = db.collection('events');
+    const eventsSnapshot = await eventsRef.where('__name__', 'in', eventUids).get(); // Use the document ID (which is the event_id)
+
+    if (eventsSnapshot.empty) {
+      return res.status(404).send({ message: 'No matching events found' });
+    }
+
+    const events = [];
+    eventsSnapshot.forEach(doc => {
+      events.push({ id: doc.id, ...doc.data() }); // Push event details along with the event ID
+    });
+
+    console.log("events", events)
+
+    // Send the fetched events in the response
+    res.status(200).send({ events });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+
+
+app.get('/events/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const eventId = req.params.id;
+
+  try {
+    await db.collection('events').doc(eventId).get();
+    res.status(200).send({ message: 'Event fetched' });
+  } catch (error) {
+    res.status(400).send({ error: error.message });
+  }
+});
+
+
+
 // Get Analytics Data (Admin only)
 app.get('/analytics', verifyToken, verifyAdmin, async (req, res) => {
   try {

@@ -1,17 +1,21 @@
 // screens/ProfileScreen.js
 
 import React, { useContext, useEffect, useState } from 'react';
-import { View, Text, Button, StyleSheet, ActivityIndicator, Image, Alert, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, Button, StyleSheet, ActivityIndicator, Image, Alert, TextInput, ScrollView, TouchableOpacity, FlatList } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../api/axiosInstance';
 import * as ImagePicker from 'expo-image-picker';
 import { Tooltip } from 'react-native-elements';
+import EventCard from './EventCard'; // Import the card component
+
 
 const ProfileScreen = () => {
   const { logout } = useContext(AuthContext);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [events, setEvents] = useState([]);
+
   const [newProfile, setNewProfile] = useState({
     imageUrl: '',
     name: '',
@@ -25,6 +29,25 @@ const ProfileScreen = () => {
   useEffect(() => {
     fetchProfile();
   }, []);
+
+
+
+  useEffect(() => {
+
+      const fetchEvents = async () => {
+        try {
+          const response = await  axiosInstance.get('/my-events');
+          
+          const data = await response.data
+          console.log(data)
+          setEvents(data.events);
+        } catch (error) {
+          console.error(error);
+        }
+      };
+  
+      fetchEvents();
+    }, []);
 
   const fetchProfile = async () => {
     try {
@@ -199,15 +222,31 @@ const ProfileScreen = () => {
           <Text style={styles.info}>Fun Things To Do: {profile.funThingsToDo || 'N/A'}</Text>
           <Text style={styles.info}>Neighborhood: {profile.neighborhood || 'N/A'}</Text>
 
-          <View style={styles.buttonContainer}>
+        
+
+          {/* <View style={styles.disabledButtonsContainer}>
+            {renderDisabledOption('Search', 'Implement in a future release')}
+            {renderDisabledOption('Matches', 'Implement in a future release')}
+            {renderDisabledOption('Messages', 'Implement in a future release')}
+          </View> */}
+
+          <View>
+            <Text>My Events</Text>
+            <FlatList
+            data={events}
+            horizontal
+            renderItem={({ item }) => <EventCard event={item} />}
+            keyExtractor={(item) => item.id} // Unique key for each item
+            showsHorizontalScrollIndicator={false} // Hides the scroll bar
+            contentContainerStyle={styles.listContainer} // Adjust spacing
+          />
+
             <Button title="Edit Profile" onPress={() => setEditing(true)} color="#FF3B30" />
             <Button title="Logout" onPress={logout} color="#666" />
           </View>
 
-          <View style={styles.disabledButtonsContainer}>
-            {renderDisabledOption('Search', 'Implement in a future release')}
-            {renderDisabledOption('Matches', 'Implement in a future release')}
-            {renderDisabledOption('Messages', 'Implement in a future release')}
+          <View style={styles.buttonContainer}>
+         
           </View>
         </>
       )}
