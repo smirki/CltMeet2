@@ -1,6 +1,6 @@
 // ChatScreen.js
 
-import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,39 +15,35 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { db } from '../firebaseConfig'; // Ensure this path is correct
-import {
-  collection,
-  addDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp,
-  doc,
-  getDoc,
-  updateDoc,
-} from 'firebase/firestore';
+import { firebase } from '../firebaseConfig'; // Importing 'firebase' from firebaseConfig.js
 import { AuthContext } from '../context/AuthContext'; // Ensure AuthContext is correctly set up
-import { jwtDecode } from 'jwt-decode'; // Import jwt-decode
 
 export default function ChatScreen({ route, navigation }) {
   const { chat } = route.params; // chat should contain chatId and name
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [usersCache, setUsersCache] = useState({});
-  const { userToken, loading, logout } = useContext(AuthContext); // Use AuthContext
+  const usersCacheRef = useRef({});
+  const { user, loading: authLoading, logout } = useContext(AuthContext); // Use AuthContext
   const [currentUserUid, setCurrentUserUid] = useState(null); // State for UID
   const [loadingMessages, setLoadingMessages] = useState(true);
   const flatListRef = useRef(); // Reference to FlatList for scrolling
 
-  // Decode JWT to extract UID
+  // Memoize dbInstance to prevent re-creation on every render
+  const dbInstance = useMemo(() => firebase.firestore(), []);
+
+  const navigateToPublicProfile = () => {
+    navigation.navigate('PublicProfile', { userId: otherUserId });
+  };
+
+
+  // Set currentUserUid from AuthContext
   useEffect(() => {
-    if (loading) {
+    if (authLoading) {
       console.log('AuthContext is loading...');
       return;
     }
 
-    if (!userToken) {
+    if (!user) {
       console.log('User not authenticated');
       Alert.alert('Authentication Error', 'You are not authenticated.', [
         { text: 'OK', onPress: () => navigation.replace('Login') },
@@ -55,25 +51,9 @@ export default function ChatScreen({ route, navigation }) {
       return;
     }
 
-    try {
-      const decodedToken = jwtDecode(userToken);
-      if (decodedToken && decodedToken.uid) {
-        setCurrentUserUid(decodedToken.uid);
-        console.log('Extracted UID from token:', decodedToken.uid);
-      } else {
-        console.warn('Failed to extract UID from token');
-        Alert.alert('Authentication Error', 'Invalid authentication token.', [
-          { text: 'OK', onPress: () => navigation.replace('Login') },
-        ]);
-        return;
-      }
-    } catch (error) {
-      console.error('Failed to decode JWT:', error);
-      Alert.alert('Authentication Error', 'Invalid authentication token.', [
-        { text: 'OK', onPress: () => navigation.replace('Login') },
-      ]);
-    }
-  }, [userToken, loading, navigation]);
+    setCurrentUserUid(user.uid);
+    console.log('Current User UID:', user.uid);
+  }, [user, authLoading, navigation]);
 
   // Set up Firestore listener for messages
   useEffect(() => {
@@ -81,18 +61,17 @@ export default function ChatScreen({ route, navigation }) {
 
     console.log('Setting up Firestore listener for chat:', chat.chatId);
 
-    const messagesRef = collection(db, 'chats', chat.chatId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+    const messagesRef = dbInstance.collection('chats').doc(chat.chatId).collection('messages');
+    const q = messagesRef.orderBy('timestamp', 'asc');
 
-    const unsubscribe = onSnapshot(
-      q,
+    const unsubscribe = q.onSnapshot(
       (querySnapshot) => {
         console.log('Received new messages snapshot');
         const msgs = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          // Validate senderId
-          if (data.senderId && data.text && data.timestamp) {
+          // Validate senderId and text
+          if (data.senderId && data.text) { // Removed 'data.timestamp' from validation
             msgs.push({ id: doc.id, ...data });
           } else {
             console.warn('Invalid message data:', data);
@@ -101,7 +80,7 @@ export default function ChatScreen({ route, navigation }) {
         setMessages(msgs);
         setLoadingMessages(false);
         // Scroll to bottom when new messages arrive
-        if (flatListRef.current) {
+        if (flatListRef.current && msgs.length > 0) {
           flatListRef.current.scrollToEnd({ animated: true });
         }
       },
@@ -116,7 +95,7 @@ export default function ChatScreen({ route, navigation }) {
       console.log('Unsubscribing from messages snapshot');
       unsubscribe();
     };
-  }, [chat.chatId, currentUserUid]);
+  }, [chat.chatId, currentUserUid, dbInstance]); // 'dbInstance' is memoized
 
   // Function to send a message
   const sendMessage = async () => {
@@ -133,24 +112,32 @@ export default function ChatScreen({ route, navigation }) {
     }
 
     try {
-      const messagesRef = collection(db, 'chats', chat.chatId, 'messages');
+      const chatRef = dbInstance.collection('chats').doc(chat.chatId);
+      const chatDoc = await chatRef.get();
+
+      if (!chatDoc.exists) {
+        console.error('Chat document does not exist:', chat.chatId);
+        Alert.alert('Error', 'Chat does not exist.');
+        return;
+      }
+
+      const messagesRef = chatRef.collection('messages');
       const newMessage = {
         senderId: currentUserUid, // Ensure this is the UID
         text: inputText.trim(),
-        timestamp: serverTimestamp(),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       };
       console.log('Adding message to Firestore:', newMessage);
-      await addDoc(messagesRef, newMessage);
+      await messagesRef.add(newMessage);
 
       // Correctly update the lastMessage field in the chat document
-      const chatRef = doc(db, 'chats', chat.chatId);
       const lastMessage = {
         text: inputText.trim(),
         senderId: currentUserUid,
-        timestamp: serverTimestamp(),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       };
       console.log('Updating lastMessage in Firestore:', lastMessage);
-      await updateDoc(chatRef, { lastMessage });
+      await chatRef.update({ lastMessage });
 
       setInputText(''); // Clear input field after sending
       console.log('Message sent successfully');
@@ -160,20 +147,20 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
-  // Function to get user name by UID with caching
+  // Function to get user name by UID with caching using useRef
   const getUserName = useCallback(
     async (uid) => {
       console.log('Fetching user name for UID:', uid);
-      if (usersCache[uid]) {
-        console.log('User name found in cache:', usersCache[uid].name);
-        return usersCache[uid].name;
+      if (usersCacheRef.current[uid]) {
+        console.log('User name found in cache:', usersCacheRef.current[uid].name);
+        return usersCacheRef.current[uid].name;
       } else {
         try {
-          const userDocRef = doc(db, 'users', uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
+          const userDocRef = dbInstance.collection('users').doc(uid);
+          const userDoc = await userDocRef.get();
+          if (userDoc.exists) {
             const userData = userDoc.data();
-            setUsersCache((prev) => ({ ...prev, [uid]: userData }));
+            usersCacheRef.current[uid] = userData; // Update cache
             console.log('Fetched user data from Firestore:', userData);
             return userData.name;
           } else {
@@ -186,7 +173,7 @@ export default function ChatScreen({ route, navigation }) {
         }
       }
     },
-    [usersCache]
+    [dbInstance]
   );
 
   // Component to render individual messages
@@ -208,7 +195,7 @@ export default function ChatScreen({ route, navigation }) {
         }
 
         const name = await getUserName(item.senderId);
-        if (isMounted) {
+        if (isMounted && name !== senderName) { // Update only if name has changed
           setSenderName(name);
           console.log('Sender name set to:', name);
         }
@@ -219,7 +206,9 @@ export default function ChatScreen({ route, navigation }) {
       return () => {
         isMounted = false;
       };
-    }, [item.senderId]);
+    }, [item.senderId, getUserName, senderName]);
+
+    const otherUserId = item.otherUserId;
 
     return (
       <View
@@ -232,6 +221,9 @@ export default function ChatScreen({ route, navigation }) {
           <Text style={styles.senderName}>{senderName}</Text>
         )}
         <Text style={styles.messageText}>{item.text}</Text>
+        {item.timestamp && (
+          <Text style={styles.timestamp}>{new Date(item.timestamp.seconds * 1000).toLocaleTimeString()}</Text>
+        )}
       </View>
     );
   });
@@ -243,8 +235,8 @@ export default function ChatScreen({ route, navigation }) {
   const keyExtractor = (item) => item.id || Math.random().toString();
 
   // Show loading indicator while messages are being fetched
-  if (loading || loadingMessages) {
-    console.log('Loading messages...');
+  if (authLoading || loadingMessages) {
+    console.log('Loading profiles or waiting for auth...');
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007aff" />
@@ -252,6 +244,8 @@ export default function ChatScreen({ route, navigation }) {
       </View>
     );
   }
+
+  const otherUserId = item.otherUserId;
 
   return (
     <KeyboardAvoidingView
@@ -264,6 +258,15 @@ export default function ChatScreen({ route, navigation }) {
           {/* Chat Header */}
           <View style={styles.header}>
             <Text style={styles.headerText}>{chat.name}</Text>
+            <TouchableOpacity
+        onPress={() => navigation.navigate('PublicProfile', { otherUserId })}
+        style={{ padding: 20, borderBottomWidth: 1, borderColor: '#ccc' }}
+        accessible={true}
+        accessibilityLabel={`View profile of ${item.otherUserName}`}
+      >
+        <Text style={{ fontSize: 18 }}>{item.otherUserName}</Text>
+        <Text>{item.lastMessage}</Text>
+      </TouchableOpacity>
           </View>
 
           {/* Messages List */}
@@ -360,6 +363,12 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
     color: '#333',
+  },
+  timestamp: {
+    fontSize: 10,
+    color: 'gray',
+    alignSelf: 'flex-end',
+    marginTop: 4,
   },
   inputContainer: {
     flexDirection: 'row',

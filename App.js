@@ -1,6 +1,6 @@
 // App.js
 
-import React, { useEffect, useState } from 'react';
+import React, { useContext } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -11,28 +11,30 @@ import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import MainTabs from './screens/MainTabs';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StripeProvider, useStripe } from '@stripe/stripe-react-native';
 import PaymentMethodScreen from './screens/AddPaymentMethodScreen';
+import { StripeProvider } from '@stripe/stripe-react-native';
+import EventsListScreen from './screens/EventsListScreen'; 
+import PublicProfileScreen from './screens/PublicProfileScreen';
+
 
 const Stack = createNativeStackNavigator();
 
 // Create a separate component to handle navigation based on auth state
 const AppNavigator = () => {
-  const { userToken, loading } = React.useContext(AuthContext);
+  const { user, loading } = useContext(AuthContext); // Corrected to use 'user'
 
   if (loading) {
-    // Show a loading indicator while checking for token
+    // Show a loading indicator while checking for auth state
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex:1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#FF3B30" />
       </View>
     );
   }
 
   return (
-    <Stack.Navigator initialRouteName={userToken ? "Main" : "Login"}>
-      {userToken ? (
+    <Stack.Navigator initialRouteName={user ? "Main" : "Login"}>
+      {user ? (
         <>
           <Stack.Screen
             name="Main"
@@ -44,6 +46,17 @@ const AppNavigator = () => {
             component={ProfileScreen}
             options={{ title: 'Profile' }}
           />
+          <Stack.Screen
+            name="Payments"
+            component={PaymentMethodScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EventsList"
+            component={EventsListScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ title: 'User Profile' }} />
         </>
       ) : (
         <>
@@ -59,11 +72,6 @@ const AppNavigator = () => {
           />
         </>
       )}
-      <Stack.Screen
-            name="Payments"
-            component={PaymentMethodScreen}
-            options={{ headerShown: false }}
-          />
     </Stack.Navigator>
   );
 };

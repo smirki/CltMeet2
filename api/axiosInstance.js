@@ -1,24 +1,29 @@
 // api/axiosInstance.js
 
 import axios from 'axios';
+import * as SecureStore from 'expo-secure-store';
+import { firebase } from '../firebaseConfig'; // Ensure firebase is correctly initialized
 import { Alert } from 'react-native';
-import eventEmitter from '../eventEmitter';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Create Axios instance
 const axiosInstance = axios.create({
-  baseURL: String(process.env.EXPO_PUBLIC_API_URL), // Ensure this matches SERVER_BASE_URL in .env
+  baseURL: String(process.env.EXPO_PUBLIC_API_URL), // Replace with your backend API URL
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to add Authorization header
+// Request interceptor to add Firebase ID Token
 axiosInstance.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('userToken'); // Ensure the key matches where you stored the token
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const user = firebase.auth().currentUser;
+      if (user) {
+        const idToken = await user.getIdToken(true); // Force refresh to get the latest token
+        config.headers.Authorization = `Bearer ${idToken}`;
+      }
+    } catch (error) {
+      console.error('Error fetching ID token for request:', error);
     }
     return config;
   },
@@ -27,10 +32,10 @@ axiosInstance.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle 401 errors
+// Response interceptor to handle 401 Unauthorized errors
 axiosInstance.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response && error.response.status === 401) {
       Alert.alert(
         'Session Expired',
@@ -39,7 +44,7 @@ axiosInstance.interceptors.response.use(
           {
             text: 'OK',
             onPress: () => {
-              eventEmitter.emit('logout'); // Emit logout event
+              firebase.auth().signOut(); // Sign out the user
             },
           },
         ],

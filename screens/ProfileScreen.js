@@ -1,124 +1,201 @@
 // screens/ProfileScreen.js
 
-import React, { useContext, useEffect, useState } from 'react';
-import { View, Text, Button, StyleSheet, ActivityIndicator, Image, Alert, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Image, 
+  TouchableOpacity, 
+  Alert, 
+  ScrollView, 
+  ActivityIndicator,
+  Modal,
+  Button
+} from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../api/axiosInstance';
 import * as ImagePicker from 'expo-image-picker';
-import { Tooltip } from 'react-native-elements';
+import * as ImageManipulator from 'expo-image-manipulator';
+import Swiper from 'react-native-swiper';
+import { Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+const { width } = Dimensions.get('window');
 
 const ProfileScreen = () => {
-  const { logout } = useContext(AuthContext);
-  const [profile, setProfile] = useState(null);
+  const { user } = useContext(AuthContext);
+  const [profileImages, setProfileImages] = useState([]);
+  const [mainProfileImage, setMainProfileImage] = useState(null);
+  const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [newProfile, setNewProfile] = useState({
-    imageUrl: '',
-    name: '',
-    age: '',
-    bio: '',
-    tags: '',
-    funThingsToDo: '',
-    neighborhood: '',
-  });
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(null);
 
   useEffect(() => {
-    fetchProfile();
+    fetchUserProfile();
   }, []);
 
-  const fetchProfile = async () => {
+  const fetchUserProfile = async () => {
     try {
-      const response = await axiosInstance.get('/getUserProfile');
-      setProfile(response.data);
-      setNewProfile({
-        imageUrl: response.data.imageUrl,
-        name: response.data.name,
-        age: response.data.age,
-        bio: response.data.bio,
-        tags: response.data.tags ? response.data.tags.join(', ') : '',
-        funThingsToDo: response.data.funThingsToDo,
-        neighborhood: response.data.neighborhood,
+      const response = await axiosInstance.get('/getUserProfile', {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
       });
-      console.log('Fetched Profile:', response.data); // Debugging
+      setProfileImages(response.data.profileImages || []);
+      setMainProfileImage(response.data.mainProfileImage || null);
+      setBio(response.data.bio || '');
+      setLoading(false);
     } catch (error) {
-      console.error('Error fetching profile:', error.response?.data?.error || error.message);
-      Alert.alert('Error', error.response?.data?.error || 'Failed to fetch profile.');
-    } finally {
+      console.error('Error fetching profile:', error);
+      Alert.alert('Error', 'Unable to fetch your profile.');
       setLoading(false);
     }
   };
 
-  const handleImagePick = async () => {
+  const pickImage = async () => {
     // Request permission to access media library
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Permission to access media library is required!');
+      Alert.alert('Permission Denied', 'Camera roll permissions are required!');
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
+    // Launch image picker
+    let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
+      allowsMultipleSelection: false, // Single selection
+      quality: 0.7, // Compress image quality
     });
 
     if (!result.cancelled) {
-      // Upload the selected image to the backend
+      handleImageUpload(result.assets[0].uri);
+    }
+  };
+
+  const handleImageUpload = async (uri) => {
+    try {
+      if (profileImages.length >= 5) {
+        Alert.alert('Limit Reached', 'You can only upload up to 5 profile images.');
+        return;
+      }
+
+      // Compress the image
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 800 } }], // Resize to width of 800px
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      // Prepare form data
       const formData = new FormData();
       formData.append('avatar', {
-        uri: result.uri,
-        name: 'avatar.jpg',
+        uri: manipResult.uri,
+        name: `profile_${Date.now()}.jpg`,
         type: 'image/jpeg',
       });
 
-      try {
-        const uploadResponse = await axiosInstance.post('/uploadProfilePicture', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-        setNewProfile({ ...newProfile, imageUrl: uploadResponse.data.imageUrl });
-      } catch (error) {
-        console.error('Error uploading image:', error.response?.data?.error || error.message);
-        Alert.alert('Error', error.response?.data?.error || 'Failed to upload image.');
+      // Upload to backend
+      const response = await axiosInstance.post('/uploadProfilePictures', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+
+      if (response.data.profileImages) {
+        setProfileImages(response.data.profileImages);
+        setMainProfileImage(response.data.mainProfileImage);
+        Alert.alert('Success', 'Profile picture uploaded successfully!');
       }
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    try {
-      const updatedProfile = {
-        imageUrl: newProfile.imageUrl,
-        name: newProfile.name,
-        age: newProfile.age,
-        bio: newProfile.bio,
-        tags: newProfile.tags.split(',').map((tag) => tag.trim()),
-        funThingsToDo: newProfile.funThingsToDo,
-        neighborhood: newProfile.neighborhood,
-      };
-
-      const response = await axiosInstance.post('/updateProfile', updatedProfile);
-      setProfile(response.data);
-      setEditing(false);
-      Alert.alert('Profile Updated', 'Your profile has been updated successfully.');
     } catch (error) {
-      console.error('Error updating profile:', error.response?.data?.error || error.message);
-      Alert.alert('Error', error.response?.data?.error || 'Failed to update profile.');
+      console.error('Error uploading image:', error);
+      Alert.alert('Upload Failed', 'There was an error uploading your image.');
     }
   };
 
-  const renderDisabledOption = (title, tooltip) => (
-    <Tooltip popover={<Text>{tooltip}</Text>} width={200}>
-      <View style={styles.disabledButton}>
-        <Text style={styles.disabledButtonText}>{title}</Text>
-      </View>
-    </Tooltip>
+  const handleImageEdit = (index) => {
+    setSelectedImageIndex(index);
+    setModalVisible(true);
+  };
+
+  const removeImage = async (index) => {
+    try {
+      const imageUrl = profileImages[index];
+      const response = await axiosInstance.delete('/deleteProfileImage', {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+        data: { imageUrl },
+      });
+
+      if (response.status === 200) {
+        const updatedImages = [...profileImages];
+        updatedImages.splice(index, 1);
+        setProfileImages(updatedImages);
+
+        // If the removed image was the main profile image, set a new one
+        if (mainProfileImage === imageUrl) {
+          const newMainImage = updatedImages[0] || null;
+          setMainProfileImage(newMainImage);
+          // Update backend with new mainProfileImage if necessary
+          // You might need to create an endpoint for this
+        }
+
+        Alert.alert('Success', 'Image removed successfully.');
+      }
+    } catch (error) {
+      console.error('Error removing image:', error);
+      Alert.alert('Removal Failed', 'There was an error removing the image.');
+    } finally {
+      setModalVisible(false);
+      setSelectedImageIndex(null);
+    }
+  };
+
+  const setAsMainImage = async (index) => {
+    try {
+      const selectedImageUrl = profileImages[index];
+      // Update mainProfileImage in Firestore
+      await axiosInstance.post('/updateMainProfileImage', {
+        mainProfileImage: selectedImageUrl,
+      }, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+
+      setMainProfileImage(selectedImageUrl);
+      Alert.alert('Success', 'Main profile image updated successfully.');
+    } catch (error) {
+      console.error('Error setting main profile image:', error);
+      Alert.alert('Update Failed', 'There was an error setting the main profile image.');
+    } finally {
+      setModalVisible(false);
+      setSelectedImageIndex(null);
+    }
+  };
+
+  const renderImageItem = (item, index) => (
+    <TouchableOpacity key={index} onPress={() => handleImageEdit(index)}>
+      <Image 
+        source={{ uri: item }} 
+        style={styles.profileImage} 
+        accessible={true}
+        accessibilityLabel={`Profile image ${index + 1}`}
+      />
+      {mainProfileImage === item && (
+        <View style={styles.mainBadge}>
+          <Text style={styles.mainBadgeText}>Main</Text>
+        </View>
+      )}
+    </TouchableOpacity>
   );
 
   if (loading) {
     return (
-      <View style={styles.loaderContainer}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF3B30" />
       </View>
     );
@@ -126,168 +203,184 @@ const ProfileScreen = () => {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {editing ? (
-        <>
-          <TouchableOpacity onPress={handleImagePick}>
-            {newProfile.imageUrl ? (
-              <Image source={{ uri: newProfile.imageUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>Pick Image</Text>
-              </View>
-            )}
+      <Text style={styles.title}>Your Profile</Text>
+
+      <View style={styles.imageContainer}>
+        <Swiper 
+          style={styles.wrapper} 
+          showsButtons={false} 
+          loop={false} 
+          autoplay={false} 
+          dotStyle={styles.dot} 
+          activeDotStyle={styles.activeDot}
+        >
+          {profileImages.map((item, index) => renderImageItem(item, index))}
+        </Swiper>
+        {profileImages.length < 5 && (
+          <TouchableOpacity style={styles.addButton} onPress={pickImage} accessible={true} accessibilityLabel="Add Profile Image">
+            <Ionicons name="add" size={36} color="#fff" />
           </TouchableOpacity>
+        )}
+      </View>
 
-          <TextInput
-            style={styles.input}
-            value={newProfile.name}
-            onChangeText={(text) => setNewProfile({ ...newProfile, name: text })}
-            placeholder="Name"
-          />
-          <TextInput
-            style={styles.input}
-            value={newProfile.age}
-            onChangeText={(text) => setNewProfile({ ...newProfile, age: text })}
-            placeholder="Age"
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={styles.input}
-            value={newProfile.bio}
-            onChangeText={(text) => setNewProfile({ ...newProfile, bio: text })}
-            placeholder="Bio"
-            multiline
-          />
-          <TextInput
-            style={styles.input}
-            value={newProfile.tags}
-            onChangeText={(text) => setNewProfile({ ...newProfile, tags: text })}
-            placeholder="Profile Tags (comma separated)"
-          />
-          <TextInput
-            style={styles.input}
-            value={newProfile.funThingsToDo}
-            onChangeText={(text) => setNewProfile({ ...newProfile, funThingsToDo: text })}
-            placeholder="Fun Things To Do"
-            multiline
-          />
-          <TextInput
-            style={styles.input}
-            value={newProfile.neighborhood}
-            onChangeText={(text) => setNewProfile({ ...newProfile, neighborhood: text })}
-            placeholder="Neighborhood in Charlotte"
-          />
+      <View style={styles.bioContainer}>
+        <Text style={styles.bioLabel}>Bio:</Text>
+        <Text style={styles.bioText}>{bio}</Text>
+        {/* Implement bio editing if needed */}
+      </View>
 
-          <Button title="Save" onPress={handleSaveProfile} color="#FF3B30" />
-          <Button title="Cancel" onPress={() => setEditing(false)} color="#666" />
-        </>
-      ) : (
-        <>
-          <TouchableOpacity onPress={handleImagePick}>
-            {profile.imageUrl ? (
-              <Image source={{ uri: profile.imageUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>{profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.name}>{profile.name}</Text>
-          <Text style={styles.info}>Age: {profile.age}</Text>
-          <Text style={styles.info}>Bio: {profile.bio}</Text>
-          <Text style={styles.info}>Tags: {profile.tags ? profile.tags.join(', ') : 'N/A'}</Text>
-          <Text style={styles.info}>Fun Things To Do: {profile.funThingsToDo || 'N/A'}</Text>
-          <Text style={styles.info}>Neighborhood: {profile.neighborhood || 'N/A'}</Text>
-
-          <View style={styles.buttonContainer}>
-            <Button title="Edit Profile" onPress={() => setEditing(true)} color="#FF3B30" />
-            <Button title="Logout" onPress={logout} color="#666" />
+      {/* Modal for Image Options */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setModalVisible(false);
+          setSelectedImageIndex(null);
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Edit Image</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => removeImage(selectedImageIndex)}>
+              <Text style={styles.modalButtonText}>Delete Image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setAsMainImage(selectedImageIndex)}>
+              <Text style={styles.modalButtonText}>Set as Main Image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#ccc' }]} onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.disabledButtonsContainer}>
-            {renderDisabledOption('Search', 'Implement in a future release')}
-            {renderDisabledOption('Matches', 'Implement in a future release')}
-            {renderDisabledOption('Messages', 'Implement in a future release')}
-          </View>
-        </>
-      )}
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  loaderContainer: {
-    flex: 1,
+  loadingContainer: {
+    flex:1,
     justifyContent: 'center',
     alignItems: 'center',
-    
   },
   container: {
-    flexGrow: 1,
     padding: 20,
-    backgroundColor: '#fff',
     alignItems: 'center',
-    paddingTop: 50,
   },
-  avatar: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+  title: {
+    fontSize: 24,
     marginBottom: 20,
+    fontWeight: 'bold',
   },
-  avatarPlaceholder: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: '#ccc',
+  imageContainer: {
+    width: width * 0.8,
+    height: 250,
+    marginBottom: 20,
+    position: 'relative',
+    backgroundColor: '#f0f0f0', 
+  },
+  profileImage: {
+    width: width * 0.8,
+    height: 250,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#FF3B30',
+    marginBottom: 10,
+  },
+  mainBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: '#FF3B30',
+    padding: 5,
+    borderRadius: 5,
+  },
+  mainBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  addButton: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FF3B30',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    elevation: 5, // For Android shadow
+    shadowColor: '#000', // For iOS shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
-  avatarText: {
-    fontSize: 20,
-    color: '#fff',
+  bioContainer: {
+    width: '100%',
+    marginTop: 20,
   },
-  name: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
-  },
-  info: {
+  bioLabel: {
     fontSize: 18,
     marginBottom: 5,
-    color: '#666',
+    fontWeight: '600',
   },
-  input: {
+  bioText: {
+    fontSize: 16,
+    color: '#555',
+  },
+  wrapper: {
+    // Optional styling for Swiper
+  },
+  dot: {
+    backgroundColor: 'rgba(0,0,0,.2)',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 3,
+    marginRight: 3,
+    marginTop: 3,
+    marginBottom: 3,
+  },
+  activeDot: {
+    backgroundColor: '#FF3B30',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 3,
+    marginRight: 3,
+    marginTop: 3,
+    marginBottom: 3,
+  },
+  modalBackground: {
+    flex:1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent:'center',
+    alignItems:'center',
+  },
+  modalContainer: {
+    width: '80%',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding:20,
+    alignItems:'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    marginBottom: 20,
+    fontWeight: 'bold',
+  },
+  modalButton: {
     width: '100%',
     padding: 10,
-    marginVertical: 10,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 10,
+    backgroundColor: '#FF3B30',
+    borderRadius: 5,
+    marginVertical:5,
+    alignItems:'center',
+  },
+  modalButtonText: {
+    color: '#fff',
     fontSize: 16,
-  },
-  buttonContainer: {
-    marginTop: 20,
-    width: '100%',
-  },
-  disabledButtonsContainer: {
-    marginTop: 20,
-    width: '100%',
-    alignItems: 'center',
-  },
-  disabledButton: {
-    width: '100%',
-    padding: 15,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 10,
-    alignItems: 'center',
-    marginVertical: 5,
-  },
-  disabledButtonText: {
-    color: '#888',
-    fontSize: 18,
   },
 });
 

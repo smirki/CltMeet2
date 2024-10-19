@@ -13,6 +13,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   ScrollView,
+  mapRef,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { SearchBar, Button, ListItem, Icon } from 'react-native-elements';
@@ -23,13 +24,6 @@ import { useNavigation } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
-
-const CHARLOTTE_COORDINATES = {
-  latitude: 35.2271,
-  longitude: -80.8431,
-  latitudeDelta: 0.0922,
-  longitudeDelta: 0.0421,
-};
 
 // Define categories with flat icons
 const categories = [
@@ -42,7 +36,7 @@ const categories = [
   // Add more categories as needed
 ];
 
-const EventsScreen = () => {
+const EventsListScreen = () => {
   const { user, loading: authLoading } = useContext(AuthContext);
   const [events, setEvents] = useState([]);
   const [filteredEvents, setFilteredEvents] = useState([]);
@@ -60,7 +54,6 @@ const EventsScreen = () => {
   const bottomSheetRef = useRef(null);
   const { confirmPayment } = useStripe();
   const navigation = useNavigation();
-  const mapRef = useRef(null);
 
   // Define snap points for the bottom sheet
   const snapPoints = useMemo(() => ['25%', '50%'], []);
@@ -228,7 +221,7 @@ const EventsScreen = () => {
     </ListItem>
   );
 
-  const renderEventCard = ({ item, index }) => {
+  const renderEventCard = ({ item }) => {
     const isRegistered = registeredEvents.includes(item.id);
 
     return (
@@ -312,24 +305,6 @@ const EventsScreen = () => {
     navigation.navigate('ChatStack', { eventId: event.id, eventTitle: event.title });
   };
 
-  const handleScrollEnd = (event) => {
-    const contentOffset = event.nativeEvent.contentOffset.x;
-    const viewSize = event.nativeEvent.layoutMeasurement.width;
-
-    // Divide the horizontal offset by the width of the view to see which page is visible
-    const pageIndex = Math.round(contentOffset / viewSize);
-
-    const currentEvent = filteredEvents[pageIndex];
-    if (currentEvent && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: currentEvent.location.latitude,
-        longitude: currentEvent.location.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      });
-    }
-  };
-
   if (loading || authLoading) {
     return (
       <View style={styles.loaderContainer}>
@@ -402,7 +377,6 @@ const EventsScreen = () => {
       <MapView
         ref={mapRef}
         style={styles.map}
-        initialRegion={CHARLOTTE_COORDINATES}
         showsUserLocation={true}
         accessibilityLabel="Events Map"
       >
@@ -820,4 +794,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default EventsScreen;
+export default EventsListScreen;

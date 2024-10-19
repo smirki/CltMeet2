@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+// screens/SignUpScreen.js
+
+import React, { useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -9,29 +11,34 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
-import axiosInstance from '../api/axiosInstance'; // Import axiosInstance
+import { AuthContext } from '../context/AuthContext';
 
 export default function SignUpScreen({ navigation }) {
+  const { signup } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const [name, setName] = useState(''); // Added name state
   const [age, setAge] = useState('');
   const [bio, setBio] = useState('');
   const [error, setError] = useState('');
   const buttonScale = new Animated.Value(1); // For button animation
 
   const handleSignUp = async () => {
+    if (!email || !password || !name) {
+      Alert.alert('Validation Error', 'Please fill in all required fields.');
+      return;
+    }
+
     try {
-      await axiosInstance.post('/signup', { // Use axiosInstance here
-        email,
-        password,
-        age,
-        bio,
-      });
+      await signup(email, password, name, age, bio);
       Alert.alert('Success', 'Account created successfully');
-      navigation.goBack();
+      navigation.navigate('Home'); // Navigate to Home or desired screen after signup
     } catch (err) {
-      setError(err.response ? err.response.data.error : 'An error occurred');
+      setError(err.message);
+      Alert.alert('Signup Error', err.message);
     }
   };
 
@@ -55,9 +62,19 @@ export default function SignUpScreen({ navigation }) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.inner}>
+      <ScrollView contentContainerStyle={styles.inner}>
         <Text style={styles.headerText}>Create Account</Text>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <TextInput
+          placeholder="Name"
+          value={name}
+          onChangeText={setName}
+          style={styles.input}
+          accessibilityLabel="Name Input"
+          accessibilityHint="Enter your full name"
+        />
+
         <TextInput
           placeholder="Email"
           value={email}
@@ -68,6 +85,7 @@ export default function SignUpScreen({ navigation }) {
           accessibilityLabel="Email Input"
           accessibilityHint="Enter your email address"
         />
+
         <TextInput
           placeholder="Password"
           value={password}
@@ -77,6 +95,7 @@ export default function SignUpScreen({ navigation }) {
           accessibilityLabel="Password Input"
           accessibilityHint="Enter your password"
         />
+
         <TextInput
           placeholder="Age"
           value={age}
@@ -86,6 +105,7 @@ export default function SignUpScreen({ navigation }) {
           accessibilityLabel="Age Input"
           accessibilityHint="Enter your age"
         />
+
         <TextInput
           placeholder="Bio"
           value={bio}
@@ -94,6 +114,7 @@ export default function SignUpScreen({ navigation }) {
           accessibilityLabel="Bio Input"
           accessibilityHint="Enter a short bio"
         />
+
         <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
           <TouchableOpacity
             style={styles.signUpButton}
@@ -107,6 +128,7 @@ export default function SignUpScreen({ navigation }) {
             <Text style={styles.buttonText}>Sign Up</Text>
           </TouchableOpacity>
         </Animated.View>
+
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -115,7 +137,7 @@ export default function SignUpScreen({ navigation }) {
         >
           <Text style={styles.backText}>Back to Login</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -123,20 +145,19 @@ export default function SignUpScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
     backgroundColor: '#f8f8f8',
-    paddingHorizontal: 30,
   },
   inner: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 30,
   },
   headerText: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ff6347',
-    marginBottom: 40,
+    marginBottom: 30,
     fontFamily: 'Recoleta',
     textAlign: 'center',
   },
@@ -179,7 +200,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   backButton: {
-    marginTop: 20,
+    marginTop: 10,
   },
   backText: {
     color: '#007aff',

@@ -1,20 +1,24 @@
 // firebaseConfig.js
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth'; // Import Firebase Auth
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth'; // Import Firebase Auth if you're using authentication
+import 'firebase/compat/firestore'; // Import Firestore if you're using Firestore
+import 'firebase/compat/storage'; // Import Firebase Storage if you're using storage features
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyDvp-58BF6W92fTQ9fYOBpdKRhCY4qO-AQ',
-  authDomain: 'cltmeet-6bbce.firebaseapp.com',
-  projectId: 'cltmeet-6bbce',
-  storageBucket: 'cltmeet-6bbce.appspot.com',
-  messagingSenderId: '302424451390',
-  appId: '1:302424451390:web:8f0ed794f55f0de0ed646f',
-  measurementId: 'G-BJC9D4LFRE',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDvp-58BF6W92fTQ9fYOBpdKRhCY4qO-AQ',
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'cltmeet-6bbce.firebaseapp.com',
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'cltmeet-6bbce',
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'cltmeet-6bbce.appspot.com',
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '302424451390',
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:302424451390:web:8f0ed794f55f0de0ed646f',
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-BJC9D4LFRE',
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app); 
+// Initialize Firebase only if it hasn't been initialized yet
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
-export { db, auth };
+const db = firebase.firestore();
+
+export { firebase, db };
