@@ -26,15 +26,15 @@ export default function ChatScreen({ route, navigation }) {
   const { user, loading: authLoading, logout } = useContext(AuthContext); // Use AuthContext
   const [currentUserUid, setCurrentUserUid] = useState(null); // State for UID
   const [loadingMessages, setLoadingMessages] = useState(true);
+  const [otherUser, setOtherUser] = useState(null); // State to hold other user data
   const flatListRef = useRef(); // Reference to FlatList for scrolling
 
   // Memoize dbInstance to prevent re-creation on every render
   const dbInstance = useMemo(() => firebase.firestore(), []);
 
-  const navigateToPublicProfile = () => {
+  const navigateToPublicProfile = (otherUserId) => {
     navigation.navigate('PublicProfile', { userId: otherUserId });
   };
-
 
   // Set currentUserUid from AuthContext
   useEffect(() => {
@@ -208,7 +208,7 @@ export default function ChatScreen({ route, navigation }) {
       };
     }, [item.senderId, getUserName, senderName]);
 
-    const otherUserId = item.otherUserId;
+    const otherUserId = item.senderId === currentUserUid ? chat.otherUserId : item.senderId; // Dynamically identify the other user
 
     return (
       <View
@@ -245,7 +245,7 @@ export default function ChatScreen({ route, navigation }) {
     );
   }
 
-  const otherUserId = item.otherUserId;
+  const otherUserId = chat.otherUserId;
 
   return (
     <KeyboardAvoidingView
@@ -259,14 +259,14 @@ export default function ChatScreen({ route, navigation }) {
           <View style={styles.header}>
             <Text style={styles.headerText}>{chat.name}</Text>
             <TouchableOpacity
-        onPress={() => navigation.navigate('PublicProfile', { otherUserId })}
-        style={{ padding: 20, borderBottomWidth: 1, borderColor: '#ccc' }}
-        accessible={true}
-        accessibilityLabel={`View profile of ${item.otherUserName}`}
-      >
-        <Text style={{ fontSize: 18 }}>{item.otherUserName}</Text>
-        <Text>{item.lastMessage}</Text>
-      </TouchableOpacity>
+              onPress={() => navigateToPublicProfile(otherUserId)}
+              style={{ padding: 20, borderBottomWidth: 1, borderColor: '#ccc' }}
+              accessible={true}
+              accessibilityLabel={`View profile of ${chat.otherUserName}`}
+            >
+              <Text style={{ fontSize: 18 }}>{chat.otherUserName}</Text>
+              <Text>{chat.lastMessage}</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Messages List */}
