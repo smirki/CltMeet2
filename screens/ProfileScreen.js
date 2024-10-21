@@ -7,7 +7,8 @@ import axiosInstance from '../api/axiosInstance';
 import * as ImagePicker from 'expo-image-picker';
 import { Tooltip } from 'react-native-elements';
 import EventCard from './EventCard'; // Import the card component
-
+import Header from './Header'; 
+import Icon from 'react-native-vector-icons/Ionicons'; 
 
 const ProfileScreen = () => {
   const { logout } = useContext(AuthContext);
@@ -206,6 +207,7 @@ const ProfileScreen = () => {
         </>
       ) : (
         <>
+         <Header currentPage="Home" />
           <TouchableOpacity onPress={handleImagePick}>
             {profile.imageUrl ? (
               <Image source={{ uri: profile.imageUrl }} style={styles.avatar} />
