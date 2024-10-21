@@ -4,8 +4,10 @@
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "build": "eas build --profile production --local -p ios",
+    "submit": "npm run build && ts-node scripts/run.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.3",
@@ -24,6 +26,7 @@
     "cors": "^2.8.5",
     "dot-env": "^0.0.1",
     "dotenv": "^16.4.5",
+    "eas": "^0.1.0",
     "eventemitter3": "^5.0.1",
     "expo": "~51.0.38",
     "expo-image-manipulator": "~12.0.5",
@@ -57,7 +60,9 @@
     "stripe": "^17.2.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.3.3"
   },
   "private": true
 }

@@ -5,6 +5,9 @@ node_modules/
 
 output.txt
 
+ios/
+android/
+
 images/
 .env
 .json
