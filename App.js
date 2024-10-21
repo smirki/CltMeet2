@@ -1,5 +1,3 @@
-// App.js
-
 import React, { useContext } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -15,13 +13,13 @@ import PaymentMethodScreen from './screens/AddPaymentMethodScreen';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import EventsListScreen from './screens/EventsListScreen'; 
 import PublicProfileScreen from './screens/PublicProfileScreen';
-
+import EditProfile from './screens/EditProfile'; // Import the new EditProfile screen
 
 const Stack = createNativeStackNavigator();
 
 // Create a separate component to handle navigation based on auth state
 const AppNavigator = () => {
-  const { user, loading } = useContext(AuthContext); // Corrected to use 'user'
+  const { user, loading } = useContext(AuthContext);
 
   if (loading) {
     // Show a loading indicator while checking for auth state
@@ -56,7 +54,17 @@ const AppNavigator = () => {
             component={EventsListScreen}
             options={{ headerShown: false }}
           />
-          <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ title: 'User Profile' }} />
+          <Stack.Screen 
+            name="PublicProfile" 
+            component={PublicProfileScreen} 
+            options={{ title: 'User Profile' }} 
+          />
+          {/* Add EditProfile screen to stack */}
+          <Stack.Screen 
+            name="EditProfile" 
+            component={EditProfile} 
+            options={{ title: 'Edit Profile' }} // Customize title as needed
+          />
         </>
       ) : (
         <>

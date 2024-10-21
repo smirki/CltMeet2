@@ -21,7 +21,7 @@ const styles = StyleSheet.create({
   card: {
     width: 250, // Width of each card
     margin: 10,
-    height: 320, // Spacing between cards
+    height: 220, // Spacing between cards
     backgroundColor: '#FFFFFF',
     
   },
