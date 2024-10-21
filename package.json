@@ -33,7 +33,7 @@
     "expo-image-picker": "~15.0.7",
     "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
-    "express": "^4.21.0",
+    "express": "^4.21.1",
     "express-rate-limit": "^7.4.1",
     "firebase": "^10.14.1",
     "firebase-admin": "^12.5.0",
@@ -42,6 +42,7 @@
     "lodash.debounce": "^4.0.8",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "node-prevent-sleep": "^0.0.4",
     "react": "18.2.0",
     "react-native": "0.74.5",
     "react-native-collapsible": "^1.6.2",
@@ -58,6 +59,9 @@
     "react-native-vector-icons": "^10.2.0",
     "sharp": "^0.33.5",
     "stripe": "^17.2.0"
+  },
+  "overrides": {
+    "chalk": "4.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
