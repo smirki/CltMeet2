@@ -16,7 +16,7 @@
       "bundleIdentifier": "com.manavmajumdar.cltmeet",
       "buildNumber": "1.0.1",
       "config" : {
-        "usesNonExemptEncryption": true
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
