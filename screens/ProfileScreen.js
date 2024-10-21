@@ -20,16 +20,21 @@ import Header from './Header';
 import { Ionicons } from '@expo/vector-icons';
 import EventCard from './EventCard';
 import Swiper from 'react-native-swiper';
+import Icon from 'react-native-vector-icons/FontAwesome';
 
 const { width, height } = Dimensions.get('window');
 
 const ProfileScreen = () => {
   const { user } = useContext(AuthContext);
+  const [profileImages, setProfileImages] = useState([]);
   const [mainProfileImage, setMainProfileImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(null);
   const slideAnim = useState(new Animated.Value(height))[0]; // Bottom sheet off-screen initially
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
+  const [bio, setBio] = useState('');
 
   useEffect(() => {
     fetchProfile();
@@ -57,12 +62,73 @@ const ProfileScreen = () => {
           Authorization: `Bearer ${user.token}`,
         },
       });
+      setProfileImages(response.data.profileImages || []);
       setMainProfileImage(response.data.mainProfileImage || null);
+      setBio(response.data.bio || '');
+      
       setLoading(false);
     } catch (error) {
       console.error('Error fetching profile:', error);
       Alert.alert('Error', 'Unable to fetch your profile.');
       setLoading(false);
+    }
+  };
+
+  const handleImageEdit = (index) => {
+    setSelectedImageIndex(index);
+    setModalVisible(true);
+  };
+
+  const removeImage = async (index) => {
+    try {
+      const imageUrl = profileImages[index];
+      const response = await axiosInstance.delete('/deleteProfileImage', {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+        data: { imageUrl },
+      });
+
+      if (response.status === 200) {
+        const updatedImages = [...profileImages];
+        updatedImages.splice(index, 1);
+        setProfileImages(updatedImages);
+
+        if (mainProfileImage === imageUrl) {
+          const newMainImage = updatedImages[0] || null;
+          setMainProfileImage(newMainImage);
+        }
+
+        Alert.alert('Success', 'Image removed successfully.');
+      }
+    } catch (error) {
+      console.error('Error removing image:', error);
+      Alert.alert('Removal Failed', 'There was an error removing the image.');
+    } finally {
+      setModalVisible(false);
+      setSelectedImageIndex(null);
+    }
+  };
+
+  const setAsMainImage = async (index) => {
+    try {
+      const selectedImageUrl = profileImages[index];
+      await axiosInstance.post('/updateMainProfileImage', {
+        mainProfileImage: selectedImageUrl,
+      }, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+
+      setMainProfileImage(selectedImageUrl);
+      Alert.alert('Success', 'Main profile image updated successfully.');
+    } catch (error) {
+      console.error('Error setting main profile image:', error);
+      Alert.alert('Update Failed', 'There was an error setting the main profile image.');
+    } finally {
+      setModalVisible(false);
+      setSelectedImageIndex(null);
     }
   };
 
@@ -119,18 +185,42 @@ const ProfileScreen = () => {
   const toggleBottomSheet = (open) => {
     if (open) {
       Animated.timing(slideAnim, {
-        toValue: 0, // Slide up to the bottom of the screen
+        toValue: -1, // Slide up to the bottom of the screen
         duration: 300,
         useNativeDriver: true,
-      }).start(() => setIsOpen(true));
+      }).start(() => {
+        setIsOpen(true);
+        setIsBottomSheetOpen(true); // Set to true when opened
+      });
     } else {
       Animated.timing(slideAnim, {
         toValue: height, // Slide down off the screen
         duration: 300,
         useNativeDriver: true,
-      }).start(() => setIsOpen(false));
+      }).start(() => {
+        setIsOpen(false);
+        setIsBottomSheetOpen(false); // Set to false when closed
+      });
     }
   };
+
+  const renderImageItem = (item, index) => (
+
+    
+    <TouchableOpacity key={index} onPress={() => handleImageEdit(index)}>
+      <Image 
+        source={{ uri: item }} 
+        style={styles.imageContainerSecondary} 
+        accessible={true}
+        accessibilityLabel={`Profile image ${index + 1}`}
+      />
+      {mainProfileImage === item && (
+        <View style={styles.mainBadge}>
+          <Text style={styles.mainBadgeText}>Main</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 
   if (loading) {
     return (
@@ -142,7 +232,22 @@ const ProfileScreen = () => {
 
   return (
     <View style={styles.screenContainer}>
-      <Header currentPage="Home" />
+    
+    <View style={styles.header}>
+      {/* App name */}
+      <Text style={styles.appName}>CltMeet</Text>
+
+      {/* Icons section */}
+      <View style={styles.iconsContainer}>
+      <TouchableOpacity style={styles.iconButton} onPress={handleSettingsPress}>
+            <Icon name="sign-out" size={25} color="#e63558" /> {/* Settings icon */}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.iconButton} onPress={handleLogoutPress}>
+            <Icon name="sign-out" size={25} color="#e63558" /> {/* Logout icon */}
+          </TouchableOpacity>
+      </View>
+    </View>
 
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.imageContainer}>
@@ -171,7 +276,15 @@ const ProfileScreen = () => {
 
         {/* Text displaying name and age */}
         <Text style={styles.nameText}>Ayush, 22</Text>
+        <Text style={styles.bioText}>{bio}</Text>
+
+        <View style={styles.streakContainer}>
+    <Ionicons name="flame-outline" size={24} color="#FF3B30" />
+    <Text style={styles.eventText}>Attended 5 events</Text>
+  </View>
       </ScrollView>
+
+    
 
       <View style={styles.eventsContainer}>
         <Text style={styles.eventsTitle}>My Events</Text>
@@ -185,38 +298,35 @@ const ProfileScreen = () => {
         />
       </View>
 
-      {/* Bottom sheet for editing profile images */}
       <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
-        <Text style={styles.sheetTitle}>Edit Your Images</Text>
+      <Text style={styles.sheetTitle}>Edit Your Images</Text>
 
-        {/* Swiper for images */}
-        <Swiper
-          style={styles.swiper}
-          showsPagination={true}
-          loop={false}
+      {/* Swiper for images */}
+      <View style={styles.imageContainerSecondary}>
+        <Swiper 
+          key={isBottomSheetOpen ? 'open' : 'closed'}  // Force re-render when bottom sheet opens
+          style={styles.wrapper} 
+          showsButtons={false} 
+          loop={false} 
+          autoplay={false} 
+          dotStyle={styles.dot} 
+          activeDotStyle={styles.activeDot}
         >
-          <View style={styles.slide}>
-            <Image
-              source={{ uri: 'https://example.com/image1.jpg' }} // Replace with actual image URL
-              style={styles.image}
-            />
-            <Text style={styles.label}>Image 1</Text>
-          </View>
-
-          <View style={styles.slide}>
-            <Image
-              source={{ uri: 'https://example.com/image2.jpg' }} // Replace with actual image URL
-              style={styles.image}
-            />
-            <Text style={styles.label}>Image 2</Text>
-          </View>
+          {profileImages.map((item, index) => renderImageItem(item, index))}
         </Swiper>
+        {profileImages.length < 5 && (
+          <TouchableOpacity style={styles.addButton} onPress={pickImage} accessible={true} accessibilityLabel="Add Profile Image">
+            <Ionicons name="add" size={36} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </View>
+
 
         <TouchableOpacity
           style={styles.modalButton}
           onPress={() => toggleBottomSheet(false)}
         >
-          <Text style={styles.modalButtonText}>Cancel</Text>
+          <Text style={styles.modalButtonText}>Save</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -240,6 +350,13 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: 120,
     height: 120,
+    marginBottom: 10,
+    position: 'relative',
+  },
+
+  imageContainerSecondary: {
+    width: '100%',
+    height: 230,
     marginBottom: 10,
     position: 'relative',
   },
@@ -275,15 +392,33 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 10,
   },
-  eventsContainer: {
+  addButton: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 10,
+    bottom: 10,
+    right: 10,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  eventsContainer: {
+    // position: 'absolute',
+    // bottom: 0,
+    // left: 0,
+    // right: 0,
+    // padding: 10,
   },
   eventsTitle: {
     fontSize: 18,
+    paddingLeft: 15,
+    color: '#e63558',
     fontWeight: 'bold',
     marginBottom: 10,
   },
@@ -337,9 +472,54 @@ const styles = StyleSheet.create({
     marginVertical: 5,
     alignItems: 'center',
   },
+  bioContainer: {
+    width: '100%',
+    
+  },
+  bioLabel: {
+    fontSize: 18,
+    marginBottom: 5,
+    fontWeight: '600',
+  },
+  bioText: {
+    fontSize: 16,
+    color: '#555',
+  },
   modalButtonText: {
     color: '#fff',
     fontSize: 16,
+  },
+  streakContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  eventText: {
+    fontSize: 16,
+    color: '#555',
+    marginLeft: 5, // Add some space between the icon and text
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    // backgroundColor: '#ffffff',
+    paddingHorizontal: 10,
+    width: '100%',
+    height: 50,
+  },
+  appName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#e63558',
+  },
+  iconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
+    padding: 10,
+    marginLeft: 5, // Space between icons
   },
 });
 
