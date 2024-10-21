@@ -1,31 +1,43 @@
-// SwiperScreen.js
-
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { Entypo } from '@expo/vector-icons';
 import axiosInstance from '../api/axiosInstance'; // Use axiosInstance
 import { AuthContext } from '../context/AuthContext'; // Import AuthContext
+import * as SecureStore from 'expo-secure-store'; // Import SecureStore to get token
+import { useNavigation } from '@react-navigation/native';
 
 export default function SwiperScreen() {
-    
-    
   const [profiles, setProfiles] = useState([]);
   const [lastVisible, setLastVisible] = useState(null);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const swiperRef = useRef(null);
-  const { userToken, logout } = useContext(AuthContext); // Access userToken from AuthContext
+  const { user, loading, logout } = useContext(AuthContext); // Access user and loading from AuthContext
+  const navigation = useNavigation();
+
+  // Fetch the token when necessary
+  const getUserToken = async () => {
+    try {
+      const token = await SecureStore.getItemAsync('userToken');
+      if (!token) throw new Error('No user token found');
+      return token;
+    } catch (error) {
+      console.error('Error retrieving user token:', error);
+      Alert.alert('Error', 'Please log in to continue.');
+    }
+  };
 
   useEffect(() => {
-    console.log('SwiperScreen useEffect triggered');
+    if (loading || !user) {
+      // Wait for user authentication to resolve
+      console.log('Authentication is still loading or no user found.');
+      return;
+    }
+
     const fetchProfiles = async () => {
-      if (!userToken) {
-        console.log('No userToken afirevailable, cannot fetch profiles');
-        Alert.alert('Authentication Error', 'Please log in to view profiles.', [
-          { text: 'OK', onPress: () => {} },
-        ]);
-        return;
-      }
+      setLoadingProfiles(true);
+      const token = await getUserToken();
+      if (!token) return; // Don't proceed if there is no token
 
       try {
         console.log('Fetching profiles...');
@@ -33,6 +45,9 @@ export default function SwiperScreen() {
           params: {
             pageSize: 10,
             lastVisible: lastVisible,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`, // Pass the user token in the request headers
           },
         });
 
@@ -58,20 +73,21 @@ export default function SwiperScreen() {
     };
 
     fetchProfiles();
-  }, [userToken, lastVisible]);
+  }, [loading, user, lastVisible]);
 
   const handleChoice = async (profile, type) => {
     console.log(`Handling choice: ${type} for profile: ${profile.name} (UID: ${profile.uid})`);
-    if (!userToken) {
-      console.log('No userToken available, cannot send choice');
-      Alert.alert('Authentication Error', 'Please log in to perform actions.');
-      return;
-    }
+    const token = await getUserToken();
+    if (!token) return;
 
     try {
       const response = await axiosInstance.post('/markSeen', {
         seenUserId: profile.uid,
         action: type,
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       console.log('Choice Response:', response.data);
@@ -106,17 +122,17 @@ export default function SwiperScreen() {
   const onSwipedLeft = async (cardIndex) => {
     const passedProfile = profiles[cardIndex];
     console.log(`Swiped left on profile: ${passedProfile.name} (UID: ${passedProfile.uid})`);
-
-    if (!userToken) {
-      console.log('No userToken available, cannot mark as passed');
-      Alert.alert('Authentication Error', 'Please log in to perform actions.');
-      return;
-    }
+    const token = await getUserToken();
+    if (!token) return;
 
     try {
       await axiosInstance.post('/markSeen', {
         seenUserId: passedProfile.uid,
         action: 'pass',
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       console.log(`Marked profile as passed: ${passedProfile.name}`);
@@ -134,9 +150,8 @@ export default function SwiperScreen() {
     }
   };
 
-  // Render loading indicator if profiles are still loading
-  if (loadingProfiles) {
-    console.log('Loading profiles...');
+  if (loading || loadingProfiles) {
+    console.log('Loading profiles or waiting for auth...');
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007aff" />

@@ -11,10 +11,7 @@ const EventCard = ({ event }) => {
         <Text style={styles.title}>{event.title}</Text>
         <Text>{event.description}</Text>
         <Text>Location: {event.location.name}</Text>
-        <Text>Cost: ${event.cost / 100}</Text>
-        <Text>Total Slots: {event.totalSlots}</Text>
-        <Text>Registered: {event.registeredCount}</Text>
-        <Text>Date: {new Date(event.date._seconds * 1000).toLocaleDateString()}</Text>
+   
       </View>
     </Card>
   );

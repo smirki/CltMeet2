@@ -1,77 +1,71 @@
 // ChatListScreen.js
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Image } from 'react-native';
-import axiosInstance from '../api/axiosInstance'; // Use axiosInstance instead of axios
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+
+import React, { useEffect, useState, useContext } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  Image,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import axiosInstance from '../api/axiosInstance'; // Ensure axiosInstance is correctly set up
+import { AuthContext } from '../context/AuthContext'; // Import AuthContext
+import { Ionicons } from '@expo/vector-icons'; // For icons
 
 export default function ChatListScreen({ navigation }) {
   const [chats, setChats] = useState([]);
-  const [token, setToken] = useState('');
-  const [registeredEvents, setRegisteredEvents] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredChats, setFilteredChats] = useState([]);
+  const { user, loading: authLoading, logout } = useContext(AuthContext); // Use AuthContext
+  const [loadingChats, setLoadingChats] = useState(true);
 
   useEffect(() => {
     const fetchChats = async () => {
-      const storedToken = await AsyncStorage.getItem('userToken');
-      setToken(storedToken);
+      if (authLoading || !user) {
+        // Wait until authentication is resolved
+        console.log('Waiting for authentication to resolve...');
+        return;
+      }
 
       try {
+        setLoadingChats(true);
+
         // Fetch chats from backend using axiosInstance
         const response = await axiosInstance.get('/chats');
         let chatsData = response.data.chats;
 
-        // Add Charlotte group chat
-        const groupChatDocRef = doc(db, 'groupChats', 'charlotteGroupChat');
-        const groupChatDoc = await getDoc(groupChatDocRef);
-        if (groupChatDoc.exists()) {
-          const groupChatData = {
-            chatId: 'charlotteGroupChat',
-            name: 'Charlotte Group Chat',
-          };
-          chatsData = [groupChatData, ...chatsData];
-        }
-
-        // Fetch user's registered events using axiosInstance
-        const userProfileResponse = await axiosInstance.get('/getUserProfile');
-        const userRegisteredEvents = userProfileResponse.data.registeredEvents || {};
-        setRegisteredEvents(userRegisteredEvents);
-
-        // Add event chats
-        const eventChats = [];
-        for (const eventId of Object.keys(userRegisteredEvents)) {
-          // Fetch event details from Firestore
-          const eventDocRef = doc(db, 'events', eventId);
-          const eventDoc = await getDoc(eventDocRef);
-          if (eventDoc.exists()) {
-            const eventData = eventDoc.data();
-            const eventChat = {
-              chatId: `event_${eventId}`,
-              name: eventData.title,
-            };
-            eventChats.push(eventChat);
-          }
-        }
-
-        // Combine all chats
-        chatsData = [...eventChats, ...chatsData];
+        // Optionally, you can add predefined group or event chats here if they are not part of the backend response
+        // For example:
+        /*
+        const groupChat = {
+          chatId: 'charlotteGroupChat',
+          name: 'Charlotte Group Chat',
+          type: 'group',
+        };
+        chatsData = [groupChat, ...chatsData];
+        */
 
         setChats(chatsData);
         setFilteredChats(chatsData); // Initialize filtered chats
+        setLoadingChats(false);
       } catch (error) {
         console.error('Error fetching chats:', error);
+        Alert.alert('Error', 'Failed to fetch chats.');
+        setLoadingChats(false);
       }
     };
 
     fetchChats();
-  }, []);
+  }, [user, authLoading]);
 
   // Filter chats based on search query
   useEffect(() => {
     if (searchQuery) {
-      const filtered = chats.filter(chat =>
+      const filtered = chats.filter((chat) =>
         (chat.name || '').toLowerCase().includes(searchQuery.toLowerCase())
       );
       setFilteredChats(filtered);
@@ -81,45 +75,61 @@ export default function ChatListScreen({ navigation }) {
   }, [searchQuery, chats]);
 
   const renderItem = ({ item }) => {
-    const isGroupChat = !item.user;
-    const tagType = item.type; // Assuming 'type' is either 'romantic' or 'friend'
+    const isGroupChat = item.type === 'group';
+    const isEventChat = item.type === 'event';
+    const tagType = item.type === 'romantic' || item.type === 'friend' ? item.type : null;
 
     return (
       <TouchableOpacity
         style={styles.chatItem}
         onPress={() => navigation.navigate('Chat', { chat: item })}
       >
-        {/* Placeholder for profile picture */}
+        {/* Profile Image */}
         <Image
           style={styles.profileImage}
           source={
             isGroupChat
               ? require('../assets/group_placeholder.png') // Placeholder for group chats
+              : isEventChat
+              ? require('../assets/event_placeholder.png') // Placeholder for event chats
               : require('../assets/placeholder.png') // Placeholder for individual chats
           }
         />
         <View style={styles.chatDetails}>
-          {isGroupChat ? (
-            <Text style={styles.name}>{item.name}</Text>
-          ) : (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Profile', { userId: item.user.id })}
-            >
-              <Text style={styles.name}>{item.user.name}</Text>
-            </TouchableOpacity>
-          )}
-          {!isGroupChat && tagType && (
+          <Text style={styles.name}>{item.name}</Text>
+          {tagType && (
             <View style={styles.tagContainer}>
-              <Text style={tagType === 'romantic' ? styles.romanticTag : styles.friendTag}>
+              <Text
+                style={
+                  tagType === 'romantic' ? styles.romanticTag : styles.friendTag
+                }
+              >
                 {tagType.charAt(0).toUpperCase() + tagType.slice(1)}
               </Text>
             </View>
           )}
           <Text style={styles.lastMessage}>Tap to chat</Text>
         </View>
+        {!isGroupChat && !isEventChat && (
+          <Ionicons
+            name="chatbubble-outline"
+            size={24}
+            color="#888"
+            style={styles.chatIcon}
+          />
+        )}
       </TouchableOpacity>
     );
   };
+
+  if (authLoading || loadingChats) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF3B30" />
+        <Text>Loading chats...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -140,7 +150,7 @@ export default function ChatListScreen({ navigation }) {
           windowSize={10}
         />
       ) : (
-        <Text>No chats found.</Text>
+        <Text style={styles.noChatsText}>No chats found.</Text>
       )}
     </View>
   );
@@ -207,5 +217,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     fontSize: 12,
     alignSelf: 'flex-start',
+  },
+  chatIcon: {
+    marginLeft: 10,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noChatsText: {
+    textAlign: 'center',
+    marginTop: 20,
+    color: '#888',
+    fontSize: 16,
   },
 });
