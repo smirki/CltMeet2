@@ -68,7 +68,7 @@ const AppNavigator = () => {
           <Stack.Screen
             name="SignUp"
             component={SignUpScreen}
-            options={{ title: 'Sign Up' }}
+            options={{ headerShown: false }}
           />
         </>
       )}

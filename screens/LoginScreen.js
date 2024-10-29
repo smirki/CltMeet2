@@ -16,10 +16,10 @@ import {
   Dimensions,
   Easing,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { AuthContext } from '../context/AuthContext';
-import { Image } from 'expo-image'
+import { Image } from 'expo-image';
 
 // Get device dimensions for responsive design
 const { width, height } = Dimensions.get('window');
@@ -54,7 +54,7 @@ export default function LoginScreen({ navigation }) {
     Animated.loop(
       Animated.timing(bgScrollAnim, {
         toValue: -width, // Scroll to the left
-        duration: 30000, // 20 seconds for a full scroll
+        duration: 30000, // 30 seconds for a full scroll
         easing: Easing.linear,
         useNativeDriver: true,
       }),
