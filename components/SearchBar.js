@@ -4,12 +4,11 @@ import { View, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import debounce from 'lodash.debounce';
 
-const SearchBar = ({ onSearch }) => {
+const SearchBar = () => {
   const [searchText, setSearchText] = useState('');
 
   // Debounce the search input to prevent excessive calls
   const debouncedSearch = debounce((text) => {
-    onSearch(text);
   }, 300);
 
   useEffect(() => {

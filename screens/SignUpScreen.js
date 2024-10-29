@@ -1,6 +1,4 @@
-// screens/SignUpScreen.js
-
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,37 +10,59 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 
+// Get device dimensions for responsive design
+const { width, height } = Dimensions.get('window');
+
 export default function SignUpScreen({ navigation }) {
   const { signup } = useContext(AuthContext);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
-  const [name, setName] = useState(''); // Added name state
   const [age, setAge] = useState('');
-  const [bio, setBio] = useState('');
   const [error, setError] = useState('');
-  const buttonScale = new Animated.Value(1); // For button animation
+  const buttonScale = useRef(new Animated.Value(1)).current;
 
-  const handleSignUp = async () => {
-    if (!email || !password || !name) {
+  const handleSignUp = useCallback(async () => {
+    // Basic validation
+    if (!name || !email || !password || !age) {
       Alert.alert('Validation Error', 'Please fill in all required fields.');
       return;
     }
 
+    // Age restriction
+    if (parseInt(age) < 18) {
+      Alert.alert('Age Restriction', 'You must be at least 18 years old to sign up.');
+      return;
+    }
+
+    // Simple email regex for validation
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Validation Error', 'Please enter a valid email address.');
+      return;
+    }
+
+    // Password strength validation (minimum 6 characters)
+    if (password.length < 6) {
+      Alert.alert('Validation Error', 'Password must be at least 6 characters long.');
+      return;
+    }
+
     try {
-      await signup(email, password, name, age, bio);
+      await signup(email, password, name, age);
       Alert.alert('Success', 'Account created successfully');
-      navigation.navigate('Home'); // Navigate to Home or desired screen after signup
+      navigation.navigate('BioTagsScreen'); // Navigate to Bio & Tags screen after signup
     } catch (err) {
       setError(err.message);
       Alert.alert('Signup Error', err.message);
     }
-  };
+  }, [name, email, password, age, signup, navigation]);
 
-  const animateButton = () => {
+  const animateButton = useCallback(() => {
     Animated.sequence([
       Animated.timing(buttonScale, {
         toValue: 0.95,
@@ -55,15 +75,16 @@ export default function SignUpScreen({ navigation }) {
         useNativeDriver: true,
       }),
     ]).start();
-  };
+  }, [buttonScale]);
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.select({ ios: 0, android: 20 })}
     >
-      <ScrollView contentContainerStyle={styles.inner}>
-        <Text style={styles.headerText}>Create Account</Text>
+      <ScrollView contentContainerStyle={styles.scrollView} keyboardShouldPersistTaps="handled">
+        <Text style={styles.headerText}>Sign Up</Text>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <TextInput
@@ -71,59 +92,51 @@ export default function SignUpScreen({ navigation }) {
           value={name}
           onChangeText={setName}
           style={styles.input}
-          accessibilityLabel="Name Input"
-          accessibilityHint="Enter your full name"
+          returnKeyType="next"
+          onSubmitEditing={() => this.emailInput.focus()}
         />
 
         <TextInput
+          ref={(input) => (this.emailInput = input)}
           placeholder="Email"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
           style={styles.input}
-          accessibilityLabel="Email Input"
-          accessibilityHint="Enter your email address"
+          returnKeyType="next"
+          onSubmitEditing={() => this.passwordInput.focus()}
         />
 
         <TextInput
+          ref={(input) => (this.passwordInput = input)}
           placeholder="Password"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           style={styles.input}
-          accessibilityLabel="Password Input"
-          accessibilityHint="Enter your password"
+          returnKeyType="next"
+          onSubmitEditing={() => this.ageInput.focus()}
         />
 
         <TextInput
+          ref={(input) => (this.ageInput = input)}
           placeholder="Age"
           value={age}
           onChangeText={setAge}
           keyboardType="numeric"
           style={styles.input}
-          accessibilityLabel="Age Input"
-          accessibilityHint="Enter your age"
+          returnKeyType="done"
         />
 
-        <TextInput
-          placeholder="Bio"
-          value={bio}
-          onChangeText={setBio}
-          style={styles.input}
-          accessibilityLabel="Bio Input"
-          accessibilityHint="Enter a short bio"
-        />
-
-        <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+        <Animated.View style={[styles.signUpButtonContainer, { transform: [{ scale: buttonScale }] }]}>
           <TouchableOpacity
             style={styles.signUpButton}
             onPress={() => {
               animateButton();
               handleSignUp();
             }}
-            accessibilityLabel="Sign Up Button"
-            accessibilityHint="Tap to create your account"
+            activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>Sign Up</Text>
           </TouchableOpacity>
@@ -132,8 +145,6 @@ export default function SignUpScreen({ navigation }) {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
-          accessibilityLabel="Back Button"
-          accessibilityHint="Go back to login screen"
         >
           <Text style={styles.backText}>Back to Login</Text>
         </TouchableOpacity>
@@ -142,68 +153,113 @@ export default function SignUpScreen({ navigation }) {
   );
 }
 
+// Separate screen for Bio and Tags after login
+export function BioTagsScreen({ navigation }) {
+  const [bio, setBio] = useState('');
+  const [tags, setTags] = useState('');
+
+  const handleBioSubmit = () => {
+    // Handle bio and tags submission here
+    Alert.alert('Success', 'Welcome to the app!');
+    navigation.navigate('Profile'); // Navigate to main app
+  };
+
+  return (
+    <View style={styles.bioContainer}>
+      <Text style={styles.headerText}>Complete Your Profile</Text>
+
+      <TextInput
+        placeholder="Bio"
+        value={bio}
+        onChangeText={setBio}
+        style={[styles.input, styles.bioInput]}
+        multiline
+        numberOfLines={4}
+      />
+
+      <TextInput
+        placeholder="Tags (separate by commas)"
+        value={tags}
+        onChangeText={setTags}
+        style={styles.input}
+      />
+
+      <TouchableOpacity
+        style={styles.signUpButton}
+        onPress={handleBioSubmit}
+      >
+        <Text style={styles.buttonText}>Submit</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FFFFFF', // Clean, white background like Facebook
   },
-  inner: {
+  scrollView: {
     flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     padding: 30,
   },
   headerText: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#ff6347',
+    color: '#1877F2', // Facebook blue color scheme
     marginBottom: 30,
-    fontFamily: 'Recoleta',
     textAlign: 'center',
   },
   errorText: {
-    color: 'red',
-    marginBottom: 10,
+    color: '#D8000C',
+    backgroundColor: '#FFBABA',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 20,
     fontSize: 14,
+    textAlign: 'center',
   },
   input: {
     width: '100%',
     padding: 15,
     marginVertical: 10,
-    backgroundColor: '#fff',
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 5,
+    backgroundColor: '#F0F2F5', // Light gray for input fields like Facebook
+    borderRadius: 8,
+    fontSize: 16,
+  },
+  bioInput: {
+    height: 100,
+    textAlignVertical: 'top',
+    paddingTop: 15,
+  },
+  signUpButtonContainer: {
+    width: '100%',
+    marginVertical: 20,
   },
   signUpButton: {
-    width: '100%',
     paddingVertical: 15,
-    backgroundColor: '#ff6347',
-    borderRadius: 30,
+    backgroundColor: '#1877F2', // Facebook blue button
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 18,
   },
   backButton: {
     marginTop: 10,
+    alignItems: 'center',
   },
   backText: {
-    color: '#007aff',
+    color: '#1877F2',
     fontSize: 16,
+  },
+  bioContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 30,
   },
 });
