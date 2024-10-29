@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
     const loginError = document.getElementById('loginError');
     const logoutButton = document.getElementById('logoutButton');
-
     const addEventButton = document.getElementById('addEventButton');
     const deleteEventButton = document.getElementById('deleteEventButton');
     const makeAdminButton = document.getElementById('makeAdminButton');

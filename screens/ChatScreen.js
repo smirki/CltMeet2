@@ -15,15 +15,16 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { firebase } from '../firebaseConfig'; // Importing 'firebase' from firebaseConfig.js
+import { firebase } from '../firebaseConfig'; // Ensure firebase is correctly initialized
 import { AuthContext } from '../context/AuthContext'; // Ensure AuthContext is correctly set up
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ChatScreen({ route, navigation }) {
   const { chat } = route.params; // chat should contain chatId and name
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const usersCacheRef = useRef({});
-  const { user, loading: authLoading, logout } = useContext(AuthContext); // Use AuthContext
+  const { user, loading: authLoading } = useContext(AuthContext); // Use AuthContext
   const [currentUserUid, setCurrentUserUid] = useState(null); // State for UID
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [otherUser, setOtherUser] = useState(null); // State to hold other user data
@@ -95,7 +96,7 @@ export default function ChatScreen({ route, navigation }) {
       console.log('Unsubscribing from messages snapshot');
       unsubscribe();
     };
-  }, [chat.chatId, currentUserUid, dbInstance]); // 'dbInstance' is memoized
+  }, [chat.chatId, currentUserUid, dbInstance]);
 
   // Function to send a message
   const sendMessage = async () => {
@@ -208,8 +209,6 @@ export default function ChatScreen({ route, navigation }) {
       };
     }, [item.senderId, getUserName, senderName]);
 
-    const otherUserId = item.senderId === currentUserUid ? chat.otherUserId : item.senderId; // Dynamically identify the other user
-
     return (
       <View
         style={[
@@ -236,7 +235,7 @@ export default function ChatScreen({ route, navigation }) {
 
   // Show loading indicator while messages are being fetched
   if (authLoading || loadingMessages) {
-    console.log('Loading profiles or waiting for auth...');
+    console.log('Loading messages...');
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007aff" />
@@ -260,12 +259,11 @@ export default function ChatScreen({ route, navigation }) {
             <Text style={styles.headerText}>{chat.name}</Text>
             <TouchableOpacity
               onPress={() => navigateToPublicProfile(otherUserId)}
-              style={{ padding: 20, borderBottomWidth: 1, borderColor: '#ccc' }}
+              style={styles.headerButton}
               accessible={true}
-              accessibilityLabel={`View profile of ${chat.otherUserName}`}
+              accessibilityLabel={`View profile of ${chat.name}`}
             >
-              <Text style={{ fontSize: 18 }}>{chat.otherUserName}</Text>
-              <Text>{chat.lastMessage}</Text>
+              <Ionicons name="person-circle-outline" size={24} color="#333" />
             </TouchableOpacity>
           </View>
 
@@ -291,6 +289,7 @@ export default function ChatScreen({ route, navigation }) {
               multiline
               onSubmitEditing={sendMessage}
               returnKeyType="send"
+              accessibilityLabel="Message input field"
             />
             <TouchableOpacity
               onPress={sendMessage}
@@ -299,6 +298,8 @@ export default function ChatScreen({ route, navigation }) {
                 { opacity: inputText.trim() ? 1 : 0.5 },
               ]}
               disabled={!inputText.trim()}
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
             >
               <Text style={styles.sendButtonText}>Send</Text>
             </TouchableOpacity>
@@ -323,11 +324,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderColor: '#eee',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   headerText: {
     fontSize: 20,
     fontWeight: '600',
+  },
+  headerButton: {
+    padding: 5,
   },
   messagesContainer: {
     flexGrow: 1,

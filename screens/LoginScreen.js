@@ -112,7 +112,6 @@ export default function LoginScreen({ navigation }) {
 
     try {
       await login(email, password);
-      navigation.navigate('Main');
     } catch (err) {
       setError(err.message);
       Alert.alert('Login Error', err.message);

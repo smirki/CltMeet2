@@ -6,7 +6,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
-require('dotenv').config(); // Load environment variables
+require('dotenv').config({ path: '../.env' }); // Load environment variables
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs');
@@ -14,6 +14,7 @@ const Stripe = require('stripe'); // **Stripe Integration**
 const morgan = require('morgan'); // HTTP request logger
 const helmet = require('helmet'); // Security middleware
 const rateLimit = require('express-rate-limit'); // Rate limiting
+const redis = require('redis'); // **Redis for Caching**
 
 const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH || './serviceAccount.json';
 const serviceAccount = require(serviceAccountPath);
@@ -26,6 +27,17 @@ const db = admin.firestore();
 
 // Initialize Stripe with secret key from environment variables
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Initialize Redis client
+const redisClient = redis.createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379',
+});
+
+redisClient.on('error', (err) => console.error('Redis Client Error', err));
+
+(async () => {
+  await redisClient.connect();
+})();
 
 // Define storage for Multer (in-memory storage)
 const storage = multer.memoryStorage();
@@ -63,7 +75,7 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
 });
-app.use(limiter);
+//app.use(limiter);
 
 // Middleware to verify Firebase ID Token
 async function verifyToken(req, res, next) {
@@ -98,6 +110,26 @@ async function verifyAdmin(req, res, next) {
   } catch (error) {
     console.error('Error fetching user data:', error);
     return res.status(500).send('Internal Server Error');
+  }
+}
+
+// Helper function for cache retrieval
+async function getCachedData(key) {
+  try {
+    const data = await redisClient.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error('Redis get error:', error);
+    return null;
+  }
+}
+
+// Helper function for cache setting
+async function setCachedData(key, value, expirationInSeconds = 3600) {
+  try {
+    await redisClient.setEx(key, expirationInSeconds, JSON.stringify(value));
+  } catch (error) {
+    console.error('Redis set error:', error);
   }
 }
 
@@ -136,7 +168,7 @@ app.post('/uploadProfilePictures', verifyToken, upload.single('avatar'), async (
     fs.writeFileSync(filepath, compressedImage);
 
     // Generate the image URL
-    const imageUrl = `${process.env.REACT_APP_SERVER_BASE_URL}/images/${filename}`;
+    const imageUrl = `/images/${filename}`;
 
     // Update user's profileImages array in Firestore
     const userRef = db.collection('users').doc(uid);
@@ -202,13 +234,32 @@ app.post('/updateMainProfileImage', verifyToken, async (req, res) => {
       mainProfileImage: mainProfileImage,
     });
 
+    // Update cached user profile
+    const updatedUserDoc = await userRef.get();
+    await setCachedData(`userProfile:${uid}`, updatedUserDoc.data());
+
+    // Denormalize matches if any
+    const matchesSnapshot = await db.collection('matches')
+      .where('users', 'array-contains', uid)
+      .get();
+
+    const batch = db.batch();
+    matchesSnapshot.docs.forEach(doc => {
+      const matchData = doc.data();
+      if (matchData.userDetails && matchData.userDetails[uid]) {
+        batch.update(doc.ref, {
+          [`userDetails.${uid}.mainProfileImage`]: mainProfileImage,
+        });
+      }
+    });
+    await batch.commit();
+
     res.status(200).send({ message: 'Main profile image updated successfully.' });
   } catch (error) {
     console.error('Error updating main profile image:', error);
     res.status(500).send({ error: 'Error updating main profile image.' });
   }
 });
-
 
 /**
  * @route   DELETE /deleteProfileImage
@@ -239,6 +290,36 @@ app.delete('/deleteProfileImage', verifyToken, async (req, res) => {
     await db.collection('users').doc(uid).update({
       profileImages: admin.firestore.FieldValue.arrayRemove(imageUrl),
     });
+
+    // If the deleted image was the mainProfileImage, reset it
+    const userDoc = await db.collection('users').doc(uid).get();
+    const userData = userDoc.data();
+    if (userData.mainProfileImage === imageUrl) {
+      const newMainImage = userData.profileImages.length > 0 ? userData.profileImages[userData.profileImages.length - 1] : null;
+      await db.collection('users').doc(uid).update({
+        mainProfileImage: newMainImage,
+      });
+
+      // Update cached user profile
+      const updatedUserDoc = await db.collection('users').doc(uid).get();
+      await setCachedData(`userProfile:${uid}`, updatedUserDoc.data());
+
+      // Denormalize matches if any
+      const matchesSnapshot = await db.collection('matches')
+        .where('users', 'array-contains', uid)
+        .get();
+
+      const batch = db.batch();
+      matchesSnapshot.docs.forEach(doc => {
+        const matchData = doc.data();
+        if (matchData.userDetails && matchData.userDetails[uid]) {
+          batch.update(doc.ref, {
+            [`userDetails.${uid}.mainProfileImage`]: newMainImage,
+          });
+        }
+      });
+      await batch.commit();
+    }
 
     res.status(200).send({ message: 'Image deleted successfully' });
   } catch (error) {
@@ -294,8 +375,10 @@ app.post('/signup', verifyToken, async (req, res) => {
       seenUsers: [],
       registeredEvents: {},
       profileImages: [], // Initialize empty array for profile images
+      mainProfileImage: null, // Initialize as null
       stripeCustomerId: customer.id, // Store Stripe Customer ID
       paymentMethods: [], // Initialize empty array for payment methods
+      totalMatches: 0, // Initialize aggregate field
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
@@ -318,6 +401,12 @@ app.get('/payment-methods', verifyToken, async (req, res) => {
   const uid = req.uid;
 
   try {
+    // Attempt to retrieve payment methods from cache
+    const cachedPaymentMethods = await getCachedData(`paymentMethods:${uid}`);
+    if (cachedPaymentMethods) {
+      return res.status(200).send({ paymentMethods: cachedPaymentMethods });
+    }
+
     // Retrieve user's Stripe Customer ID and Payment Methods from Firestore
     const userDoc = await db.collection('users').doc(uid).get();
     if (!userDoc.exists) {
@@ -336,6 +425,9 @@ app.get('/payment-methods', verifyToken, async (req, res) => {
       customer: stripeCustomerId,
       type: 'card',
     });
+
+    // Cache the payment methods
+    await setCachedData(`paymentMethods:${uid}`, paymentMethods.data, 3600); // Cache for 1 hour
 
     res.status(200).send({ paymentMethods: paymentMethods.data });
   } catch (error) {
@@ -388,6 +480,9 @@ app.post('/save-payment-method', verifyToken, async (req, res) => {
       paymentMethods: admin.firestore.FieldValue.arrayUnion(paymentMethodId),
     });
 
+    // Invalidate cached payment methods
+    await redisClient.del(`paymentMethods:${uid}`);
+
     res.status(200).send({ message: 'Payment Method saved successfully' });
   } catch (error) {
     console.error('Error saving Payment Method:', error);
@@ -428,6 +523,9 @@ app.delete('/payment-methods/:paymentMethodId', verifyToken, async (req, res) =>
     await db.collection('users').doc(uid).update({
       paymentMethods: admin.firestore.FieldValue.arrayRemove(paymentMethodId),
     });
+
+    // Invalidate cached payment methods
+    await redisClient.del(`paymentMethods:${uid}`);
 
     res.status(200).send({ message: 'Payment Method deleted successfully.' });
   } catch (error) {
@@ -496,6 +594,7 @@ app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
       email: user.email,
       displayName: user.displayName || '',
       admin: user.customClaims && user.customClaims.admin ? true : false,
+      totalMatches: user.customClaims && user.customClaims.totalMatches ? user.customClaims.totalMatches : 0,
     }));
     res.status(200).send({ users });
   } catch (error) {
@@ -726,8 +825,8 @@ app.post('/purchaseTicket', verifyToken, async (req, res) => {
   const uid = req.uid;
   const { eventId, paymentMethodId } = req.body;
 
-  if (!eventId) {
-    return res.status(400).send({ error: 'Missing eventId.' });
+  if (!eventId || !paymentMethodId) {
+    return res.status(400).send({ error: 'Missing eventId or paymentMethodId.' });
   }
 
   try {
@@ -782,7 +881,29 @@ app.post('/purchaseTicket', verifyToken, async (req, res) => {
         registeredCount: admin.firestore.FieldValue.increment(1),
       });
 
-      res.status(200).send({ message: 'Ticket purchased and registered for event successfully.' });
+      // Create a ticket record
+      const ticketRef = await db.collection('tickets').add({
+        userId: uid,
+        eventId: eventId,
+        purchaseDate: admin.firestore.FieldValue.serverTimestamp(),
+        paymentMethodId: paymentMethodId,
+        amount: eventData.cost,
+        status: 'confirmed',
+      });
+
+      // Invalidate cached event data if necessary
+      await redisClient.del(`event:${eventId}`);
+
+      res.status(200).send({ 
+        message: 'Ticket purchased and registered for event successfully.',
+        ticket: {
+          id: ticketRef.id,
+          eventId: eventId,
+          purchaseDate: admin.firestore.FieldValue.serverTimestamp(),
+          amount: eventData.cost,
+          status: 'confirmed',
+        },
+      });
     } else {
       res.status(400).send({ error: 'Payment not successful.' });
     }
@@ -852,18 +973,38 @@ app.get('/incomingMatches', verifyToken, async (req, res) => {
       .where('to', '==', uid)
       .get();
 
+    if (incomingMatchRequestsSnapshot.empty) {
+      return res.status(200).send({ incomingMatches: [] });
+    }
+
     const incomingMatches = [];
 
-    for (const doc of incomingMatchRequestsSnapshot.docs) {
+    const fromUids = incomingMatchRequestsSnapshot.docs.map(doc => doc.data().from);
+
+    // Batch fetching in chunks of 10
+    const batches = [];
+    const uniqueFromUids = [...new Set(fromUids)]; // Remove duplicates
+    while (uniqueFromUids.length) {
+      const batch = uniqueFromUids.splice(0, 10);
+      batches.push(db.collection('users').where('uid', 'in', batch).select('name', 'mainProfileImage').get());
+    }
+
+    const usersSnapshots = await Promise.all(batches);
+    const usersMap = {};
+    usersSnapshots.forEach(snapshot => {
+      snapshot.forEach(doc => {
+        usersMap[doc.id] = doc.data();
+      });
+    });
+
+    incomingMatchRequestsSnapshot.forEach(doc => {
       const data = doc.data();
-      const userDoc = await db.collection('users').doc(data.from).get();
-      const userData = userDoc.data();
       incomingMatches.push({
         requestId: doc.id,
-        user: userData,
+        user: usersMap[data.from] || null,
         type: data.type, // 'friend' or 'romantic'
       });
-    }
+    });
 
     res.status(200).send({ incomingMatches });
   } catch (error) {
@@ -889,7 +1030,7 @@ app.get('/profiles', verifyToken, async (req, res) => {
     const userData = userDoc.data();
     const seenUsers = userData.seenUsers || [];
 
-    // Adjust exclusion logic
+    // Adjust exclusion logic using a compound query
     let query = db.collection('users').orderBy('uid').limit(pageSize);
 
     if (lastVisible) {
@@ -918,64 +1059,95 @@ app.get('/profiles', verifyToken, async (req, res) => {
   }
 });
 
-/**
- * @route   POST /markSeen
- * @desc    Mark a user as seen and handle match requests
- * @access  Private
- */
 app.post('/markSeen', verifyToken, async (req, res) => {
   const uid = req.uid;
   const { seenUserId, action } = req.body; // action can be 'pass', 'friend', 'romantic'
 
-  try {
-    // Update seenUsers
-    await db.collection('users').doc(uid).update({
-      seenUsers: admin.firestore.FieldValue.arrayUnion(seenUserId),
-    });
+  if (!seenUserId || !['pass', 'friend', 'romantic'].includes(action)) {
+    return res.status(400).send({ error: 'Invalid request parameters.' });
+  }
 
-    if (action === 'friend' || action === 'romantic') {
-      // Create or update match request
-      const matchRequestRef = db.collection('matchRequests').doc(`${uid}_${seenUserId}`);
-      await matchRequestRef.set({
-        from: uid,
-        to: seenUserId,
-        type: action,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+  try {
+    const userRef = db.collection('users').doc(uid);
+    const seenUserRef = db.collection('users').doc(seenUserId);
+    const incomingMatchRef = db.collection('matchRequests').doc(`${seenUserId}_${uid}`);
+    const outgoingMatchRef = db.collection('matchRequests').doc(`${uid}_${seenUserId}`);
+    const matchRef = db.collection('matches').doc();
+    const chatRef = db.collection('chats').doc();
+
+    await db.runTransaction(async (transaction) => {
+      const [userDoc, seenUserDoc, incomingMatchDoc, outgoingMatchDoc] = await Promise.all([
+        transaction.get(userRef),
+        transaction.get(seenUserRef),
+        transaction.get(incomingMatchRef),
+        transaction.get(outgoingMatchRef),
+      ]);
+
+      const userData = userDoc.data();
+      const seenUserData = seenUserDoc.data();
+
+      if (!userData || !seenUserData) {
+        throw new Error('User data not found.');
+      }
+
+      transaction.update(userRef, {
+        seenUsers: admin.firestore.FieldValue.arrayUnion(seenUserId),
       });
 
-      // Check if there's a reciprocal match request
-      const reciprocalMatchRequestRef = db.collection('matchRequests').doc(`${seenUserId}_${uid}`);
-      const reciprocalMatchRequestDoc = await reciprocalMatchRequestRef.get();
+      if (action === 'friend' || action === 'romantic') {
+        if (incomingMatchDoc.exists && incomingMatchDoc.data().type === action) {
+          // Mutual match found
+          const incomingData = incomingMatchDoc.data();
 
-      if (reciprocalMatchRequestDoc.exists) {
-        // Create a match
-        const matchRef = db.collection('matches').doc();
-        await matchRef.set({
-          users: [uid, seenUserId],
-          type: action, // You might want to handle different types
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+          transaction.set(matchRef, {
+            users: [uid, seenUserId],
+            type: action,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            userDetails: {
+              [uid]: {
+                name: userData.name || '',
+                mainProfileImage: userData.mainProfileImage || '',
+              },
+              [seenUserId]: {
+                name: incomingData.fromUserName || seenUserData.name || '',
+                mainProfileImage: incomingData.fromUserMainProfileImage || seenUserData.mainProfileImage || '',
+              },
+            },
+            chatId: chatRef.id,
+          });
 
-        // Delete match requests
-        await matchRequestRef.delete();
-        await reciprocalMatchRequestRef.delete();
+          // Delete both match requests
+          transaction.delete(incomingMatchRef);
+          if (outgoingMatchDoc.exists) {
+            transaction.delete(outgoingMatchRef);
+          }
 
-        // Create chat
-        const chatRef = db.collection('chats').doc();
-        await chatRef.set({
-          users: [uid, seenUserId],
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-        return res.status(200).send({ message: 'Matched', chatId: chatRef.id });
+          // Create chat
+          transaction.set(chatRef, {
+            users: [uid, seenUserId],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else {
+          // Create an outgoing match request
+          transaction.set(outgoingMatchRef, {
+            from: uid,
+            to: seenUserId,
+            type: action,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            fromUserName: userData.name || '',
+            fromUserMainProfileImage: userData.mainProfileImage || '',
+          });
+        }
       }
-    }
+    });
 
-    res.status(200).send({ message: 'User marked as seen' });
+    res.status(200).send({ message: 'User marked as seen and processed accordingly.' });
   } catch (error) {
-    res.status(400).send({ error: error.message });
+    console.error('Error in markSeen:', error);
+    res.status(500).send({ error: 'Internal Server Error' });
   }
 });
+
 
 /**
  * @route   GET /matches
@@ -990,38 +1162,29 @@ app.get('/matches', verifyToken, async (req, res) => {
       .where('users', 'array-contains', uid)
       .get();
 
+    if (matchesSnapshot.empty) {
+      return res.status(200).send({ matches: [] });
+    }
+
     const matches = [];
 
-    for (const doc of matchesSnapshot.docs) {
+    matchesSnapshot.forEach(doc => {
       const data = doc.data();
-      const otherUserId = data.users.find((id) => id !== uid);
-      const userDoc = await db.collection('users').doc(otherUserId).get();
-      const userData = userDoc.data();
-
-      // Find the chat between the two users
-      const chatSnapshot = await db.collection('chats')
-        .where('users', 'array-contains', uid)
-        .get();
-
-      let chatId = null;
-      chatSnapshot.forEach(chatDoc => {
-        const chatData = chatDoc.data();
-        if (chatData.users.includes(otherUserId)) {
-          chatId = chatDoc.id;
-        }
-      });
+      const otherUserId = data.users.find(id => id !== uid);
+      const otherUserDetails = data.userDetails ? data.userDetails[otherUserId] : null;
 
       matches.push({
         matchId: doc.id,
-        user: userData,
-        mainProfileImage: userData.mainProfileImage,
+        user: otherUserDetails,
+        mainProfileImage: otherUserDetails ? otherUserDetails.mainProfileImage : null,
         type: data.type,
-        chatId: chatId,
+        chatId: data.chatId,
       });
-    }
+    });
 
     res.status(200).send({ matches });
   } catch (error) {
+    console.error('Error fetching matches:', error);
     res.status(400).send({ error: error.message });
   }
 });
@@ -1039,18 +1202,38 @@ app.get('/outgoingMatches', verifyToken, async (req, res) => {
       .where('from', '==', uid)
       .get();
 
+    if (matchRequestsSnapshot.empty) {
+      return res.status(200).send({ outgoingMatches: [] });
+    }
+
     const outgoingMatches = [];
 
-    for (const doc of matchRequestsSnapshot.docs) {
+    const toUids = matchRequestsSnapshot.docs.map(doc => doc.data().to);
+
+    // Batch fetching in chunks of 10
+    const batches = [];
+    const uniqueToUids = [...new Set(toUids)]; // Remove duplicates
+    while (uniqueToUids.length) {
+      const batch = uniqueToUids.splice(0, 10);
+      batches.push(db.collection('users').where('uid', 'in', batch).select('name', 'mainProfileImage').get());
+    }
+
+    const usersSnapshots = await Promise.all(batches);
+    const usersMap = {};
+    usersSnapshots.forEach(snapshot => {
+      snapshot.forEach(doc => {
+        usersMap[doc.id] = doc.data();
+      });
+    });
+
+    matchRequestsSnapshot.forEach(doc => {
       const data = doc.data();
-      const userDoc = await db.collection('users').doc(data.to).get();
-      const userData = userDoc.data();
       outgoingMatches.push({
         requestId: doc.id,
-        user: userData,
+        user: usersMap[data.to] || null,
         type: data.type,
       });
-    }
+    });
 
     res.status(200).send({ outgoingMatches });
   } catch (error) {
@@ -1112,23 +1295,50 @@ app.delete('/matches/:matchId', verifyToken, async (req, res) => {
       return res.status(403).send({ error: 'Unauthorized' });
     }
 
+    const otherUserId = matchData.users.find(id => id !== uid);
+
     await matchRef.delete();
 
-    // Optionally delete the associated chat
-    const chatsSnapshot = await db.collection('chats')
-      .where('users', 'array-contains', uid)
-      .get();
+    // Delete associated chat
+    if (matchData.chatId) {
+      const chatRef = db.collection('chats').doc(matchData.chatId);
+      await chatRef.delete();
+    }
 
-    chatsSnapshot.forEach(async (doc) => {
-      const chatData = doc.data();
-      if (chatData.users.includes(matchData.users[0]) && chatData.users.includes(matchData.users[1])) {
-        await db.collection('chats').doc(doc.id).delete();
-      }
-    });
-
-    res.status(200).send({ message: 'Match deleted' });
+    res.status(200).send({ message: 'Match and associated chat deleted successfully.' });
   } catch (error) {
     res.status(400).send({ error: error.message });
+  }
+});
+
+/**
+ * @route   POST /denyMatch
+ * @desc    Deny an incoming match request
+ * @access  Private
+ */
+app.post('/denyMatch', verifyToken, async (req, res) => {
+  const uid = req.uid;
+  const { matchId, fromUserId } = req.body;
+
+  if (!matchId || !fromUserId) {
+    return res.status(400).send({ error: 'Invalid request parameters.' });
+  }
+
+  try {
+    const incomingMatchRef = db.collection('matchRequests').doc(`${fromUserId}_${uid}`);
+    const incomingMatchDoc = await incomingMatchRef.get();
+
+    if (!incomingMatchDoc.exists) {
+      return res.status(404).send({ error: 'Match request not found.' });
+    }
+
+    // Delete the incoming match request
+    await incomingMatchRef.delete();
+
+    res.status(200).send({ message: 'Match request denied successfully.' });
+  } catch (error) {
+    console.error('Error denying match:', error);
+    res.status(500).send({ error: 'Internal Server Error' });
   }
 });
 
@@ -1157,20 +1367,16 @@ app.get('/chats', verifyToken, async (req, res) => {
       .where('users', 'array-contains', uid)
       .get();
 
-    const individualChats = [];
-    for (const doc of matchesSnapshot.docs) {
+    const individualChats = matchesSnapshot.docs.map(doc => {
       const data = doc.data();
-      const otherUserId = data.users.find((id) => id !== uid);
-      const otherUserDoc = await db.collection('users').doc(otherUserId).get();
-      if (otherUserDoc.exists) {
-        const otherUserData = otherUserDoc.data();
-        individualChats.push({
-          chatId: data.chatId || `chat_${doc.id}`, // Ensure chatId is present
-          name: otherUserData.name,
-          type: data.type, // 'friend' or 'romantic'
-        });
-      }
-    }
+      const otherUserId = data.users.find(id => id !== uid);
+      const otherUserDetails = data.userDetails ? data.userDetails[otherUserId] : null;
+      return {
+        chatId: data.chatId || `chat_${doc.id}`, // Ensure chatId is present
+        name: otherUserDetails ? otherUserDetails.name : 'Unknown',
+        type: data.type, // 'friend' or 'romantic'
+      };
+    });
 
     // Fetch group chats (if any)
     const groupChatsSnapshot = await db.collection('groupChats').get();
@@ -1182,16 +1388,25 @@ app.get('/chats', verifyToken, async (req, res) => {
 
     // Fetch event chats based on user's registered events
     const eventChats = [];
-    for (const eventId of Object.keys(registeredEvents)) {
-      const eventDoc = await db.collection('events').doc(eventId).get();
-      if (eventDoc.exists) {
-        const eventData = eventDoc.data();
-        eventChats.push({
-          chatId: `event_${eventId}`,
-          name: eventData.title,
-          type: 'event',
-        });
+    const eventIds = Object.keys(registeredEvents);
+    if (eventIds.length > 0) {
+      // Batch fetching in chunks of 10
+      const batches = [];
+      while (eventIds.length) {
+        const batch = eventIds.splice(0, 10);
+        batches.push(db.collection('events').where(admin.firestore.FieldPath.documentId(), 'in', batch).select('title').get());
       }
+
+      const eventsSnapshots = await Promise.all(batches);
+      eventsSnapshots.forEach(snapshot => {
+        snapshot.forEach(doc => {
+          eventChats.push({
+            chatId: `event_${doc.id}`,
+            name: doc.data().title,
+            type: 'event',
+          });
+        });
+      });
     }
 
     // Combine all chats
@@ -1231,7 +1446,7 @@ app.get('/chats/:chatId/messages', verifyToken, async (req, res) => {
       .orderBy('timestamp', 'asc')
       .get();
 
-    const messages = messagesSnapshot.docs.map((doc) => doc.data());
+    const messages = messagesSnapshot.docs.map(doc => doc.data());
 
     res.status(200).send({ messages });
   } catch (error) {
@@ -1285,23 +1500,40 @@ app.post('/chats/:chatId/messages', verifyToken, async (req, res) => {
 
 /**
  * @route   GET /getUserProfile
- * @desc    Get authenticated user's profile
+ * @desc    Get authenticated user's profile along with tickets
  * @access  Private
  */
 app.get('/getUserProfile', verifyToken, async (req, res) => {
   const uid = req.uid;
 
   try {
-    console.log(`Fetching profile for UID: ${uid}`);
     const userDoc = await db.collection('users').doc(uid).get();
     if (!userDoc.exists) {
       return res.status(404).send({ error: 'User not found' });
     }
-    res.status(200).send(userDoc.data());
+    const userData = userDoc.data();
+
+    // Fetch user's tickets
+    const ticketsSnapshot = await db.collection('tickets').where('userId', '==', uid).get();
+    const tickets = ticketsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    // Prepare the response data
+    const responseData = {
+      ...userData,
+      uid: uid,
+      tickets: tickets,
+    };
+
+    res.status(200).send(responseData);
   } catch (error) {
+    console.error('Error fetching user profile:', error);
     res.status(400).send({ error: error.message });
   }
 });
+
 
 /**
  * @route   POST /updateProfile
@@ -1320,8 +1552,34 @@ app.post('/updateProfile', verifyToken, async (req, res) => {
     if (registeredEvents !== undefined) updateData.registeredEvents = registeredEvents;
 
     await db.collection('users').doc(uid).update(updateData);
+
+    // Fetch updated user data
+    const updatedUserDoc = await db.collection('users').doc(uid).get();
+    const updatedUserData = updatedUserDoc.data();
+
+    // Update cache
+    await setCachedData(`userProfile:${uid}`, updatedUserData, 3600); // Cache for 1 hour
+
+    // Denormalize matches if any
+    const matchesSnapshot = await db.collection('matches')
+      .where('users', 'array-contains', uid)
+      .get();
+
+    const batch = db.batch();
+    matchesSnapshot.docs.forEach(doc => {
+      const matchData = doc.data();
+      if (matchData.userDetails && matchData.userDetails[uid]) {
+        batch.update(doc.ref, {
+          [`userDetails.${uid}.name`]: updatedUserData.name || matchData.userDetails[uid].name,
+          [`userDetails.${uid}.mainProfileImage`]: updatedUserData.mainProfileImage || matchData.userDetails[uid].mainProfileImage,
+        });
+      }
+    });
+    await batch.commit();
+
     res.status(200).send({ message: 'Profile updated successfully' });
   } catch (error) {
+    console.error('Error updating profile:', error);
     res.status(400).send({ error: error.message });
   }
 });
@@ -1369,22 +1627,68 @@ app.get('/publicProfile/:userId', verifyToken, async (req, res) => {
 
 /**
  * @route   GET /events
- * @desc    Get all events
+ * @desc    Get all events with support for searching, filtering, sorting, and pagination
  * @access  Private
  */
 app.get('/events', verifyToken, async (req, res) => {
   try {
-    const eventsSnapshot = await db.collection('events').get();
-    const events = eventsSnapshot.docs.map((doc) => ({
+    const { search, type, sortBy, order, page = 1, limit = 10 } = req.query;
+
+    // Sanitize and validate input
+    const sanitizedSearch = search ? search.toLowerCase() : '';
+    const sanitizedType = type ? type.toLowerCase() : 'all';
+    const validSortBy = ['date', 'cost', 'registeredCount'];
+    const sanitizedSortBy = validSortBy.includes(sortBy) ? sortBy : 'date';
+    const sanitizedOrder = order === 'desc' ? 'desc' : 'asc';
+    const pageNumber = parseInt(page) > 0 ? parseInt(page) : 1;
+    const pageLimit = parseInt(limit) > 0 && parseInt(limit) <= 100 ? parseInt(limit) : 10;
+
+    const cacheKey = `events:${sanitizedSearch}:${sanitizedType}:${sanitizedSortBy}:${sanitizedOrder}:${pageNumber}:${pageLimit}`;
+    const cachedEvents = await getCachedData(cacheKey);
+    if (cachedEvents) {
+      return res.status(200).send({ events: cachedEvents, cached: true });
+    }
+
+    let query = db.collection('events');
+
+    // Search by keywords
+    if (sanitizedSearch) {
+      query = query.where('keywords', 'array-contains', sanitizedSearch);
+    }
+
+    // Filter by category/type
+    if (sanitizedType !== 'all') {
+      query = query.where('category', '==', sanitizedType);
+    }
+
+    // Sorting
+    query = query.orderBy(sanitizedSortBy, sanitizedOrder);
+
+    // Pagination
+    const snapshot = await query.limit(pageLimit).get();
+
+    const events = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
     }));
 
-    res.status(200).send({ events });
+    // Cache the fetched events
+    await setCachedData(cacheKey, events, 300); // Cache for 5 minutes
+
+    res.status(200).send({ events, cached: false });
   } catch (error) {
-    res.status(400).send({ error: error.message });
+    console.error('Error fetching events:', error);
+    res.status(400).send({ error: 'Failed to fetch events' });
   }
 });
+
+function generateKeywords(title, description) {
+  const text = `${title} ${description}`.toLowerCase();
+  const words = text.match(/\b\w+\b/g) || [];
+  const uniqueWords = Array.from(new Set(words));
+  return uniqueWords;
+}
+
 
 /**
  * @route   POST /events
@@ -1392,14 +1696,17 @@ app.get('/events', verifyToken, async (req, res) => {
  * @access  Admin Only
  */
 app.post('/events', verifyToken, verifyAdmin, async (req, res) => {
-  const { title, description, location, totalSlots, cost, date, imageUrl } = req.body;
+  const { title, description, location, totalSlots, cost, date, imageUrl, category } = req.body;
 
   // Validate required fields
-  if (!title || !description || !location || !totalSlots || !cost || !date) {
+  if (!title || !description || !location || !totalSlots || !cost || !date || !category) {
     return res.status(400).send({ error: 'Missing required event fields.' });
   }
 
   try {
+    // Generate keywords for search (simple implementation)
+    const keywords = generateKeywords(title, description);
+
     const eventRef = await db.collection('events').add({
       title,
       description,
@@ -1413,8 +1720,13 @@ app.post('/events', verifyToken, verifyAdmin, async (req, res) => {
       cost: cost,
       date: new Date(date), // Ensure date is stored as a timestamp
       imageUrl: imageUrl || 'https://via.placeholder.com/150', // Default image if not provided
+      category: category.toLowerCase(),
+      keywords, // For search functionality
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    // Invalidate cached events
+    await redisClient.del('events:*'); // Use pattern matching if supported, else delete specific keys as needed
 
     res.status(200).send({ message: 'Event created', eventId: eventRef.id });
   } catch (error) {
@@ -1423,18 +1735,24 @@ app.post('/events', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 /**
- * @route   DELETE /events/:id
- * @desc    Delete an event by ID (Admin Only)
- * @access  Admin Only
+ * @route   GET /events/:id
+ * @desc    Retrieve a single event by ID
+ * @access  Private
  */
-app.delete('/events/:id', verifyToken, verifyAdmin, async (req, res) => {
-  const eventId = req.params.id;
+app.get('/events/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
 
   try {
-    await db.collection('events').doc(eventId).delete();
-    res.status(200).send({ message: 'Event deleted' });
+    const eventDoc = await db.collection('events').doc(id).get();
+    if (!eventDoc.exists) {
+      return res.status(404).send({ error: 'Event not found' });
+    }
+
+    const eventData = { id: eventDoc.id, ...eventDoc.data() };
+    res.status(200).send({ event: eventData });
   } catch (error) {
-    res.status(400).send({ error: error.message });
+    console.error('Error fetching event:', error);
+    res.status(500).send({ error: 'Error fetching event' });
   }
 });
 

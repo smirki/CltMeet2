@@ -1,23 +1,24 @@
+// MainTabs.js
+
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons'; // Import vector icons
 
 import EventsScreen from './EventsScreen';
 import SwiperScreen from './SwiperScreen';
-import MatchesScreen from './MatchesScreen';
+import MatchesScreen from './MatchesScreen'; // Ensure this screen exists
 import ChatStack from './ChatStack';
 import ProfileScreen from './ProfileScreen';
-
-
 
 const Tab = createBottomTabNavigator();
 
 export default function MainTabs() {
   return (
     <Tab.Navigator
-      initialRouteName="Swiper"
+      initialRouteName="Events" // Set 'Events' as the initial route
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarShowLabel: false, // Hide text labels
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
@@ -28,9 +29,6 @@ export default function MainTabs() {
               break;
             case 'Swiper':
               iconName = focused ? 'swap-horizontal' : 'swap-horizontal-outline';
-              break;
-            case 'Matches':
-              iconName = focused ? 'heart' : 'heart-outline';
               break;
             case 'Chats':
               iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
@@ -47,12 +45,15 @@ export default function MainTabs() {
         },
         tabBarActiveTintColor: '#FF3B30',
         tabBarInactiveTintColor: 'gray',
-        tabBarStyle: { paddingBottom: 5 },
+        tabBarStyle: {
+          paddingVertical: 10,
+          height: 80, // Adjust height for better touch targets
+        },
       })}
     >
       <Tab.Screen name="Events" component={EventsScreen} />
       <Tab.Screen name="Swiper" component={SwiperScreen} />
-      <Tab.Screen name="Matches" component={MatchesScreen} />
+      {/* Removed the 'Matches' Tab */}
       <Tab.Screen name="Chats" component={ChatStack} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

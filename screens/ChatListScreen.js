@@ -12,15 +12,14 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import axiosInstance from '../api/axiosInstance'; // Ensure axiosInstance is correctly set up
-import { AuthContext } from '../context/AuthContext'; // Import AuthContext
-import { Ionicons } from '@expo/vector-icons'; // For icons
+import axiosInstance from '../api/axiosInstance';
+import { AuthContext } from '../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ChatListScreen({ navigation }) {
   const [chats, setChats] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredChats, setFilteredChats] = useState([]);
-  const { user, loading: authLoading, logout } = useContext(AuthContext); // Use AuthContext
+  const { user, loading: authLoading, logout } = useContext(AuthContext);
   const [loadingChats, setLoadingChats] = useState(true);
 
   useEffect(() => {
@@ -39,7 +38,6 @@ export default function ChatListScreen({ navigation }) {
         let chatsData = response.data.chats;
 
         // Optionally, you can add predefined group or event chats here if they are not part of the backend response
-        // For example:
         /*
         const groupChat = {
           chatId: 'charlotteGroupChat',
@@ -50,7 +48,6 @@ export default function ChatListScreen({ navigation }) {
         */
 
         setChats(chatsData);
-        setFilteredChats(chatsData); // Initialize filtered chats
         setLoadingChats(false);
       } catch (error) {
         console.error('Error fetching chats:', error);
@@ -74,6 +71,8 @@ export default function ChatListScreen({ navigation }) {
     }
   }, [searchQuery, chats]);
 
+  const [filteredChats, setFilteredChats] = useState([]);
+
   const renderItem = ({ item }) => {
     const isGroupChat = item.type === 'group';
     const isEventChat = item.type === 'event';
@@ -83,6 +82,8 @@ export default function ChatListScreen({ navigation }) {
       <TouchableOpacity
         style={styles.chatItem}
         onPress={() => navigation.navigate('Chat', { chat: item })}
+        accessibilityRole="button"
+        accessibilityLabel={`Open chat with ${item.name}`}
       >
         {/* Profile Image */}
         <Image
@@ -139,6 +140,7 @@ export default function ChatListScreen({ navigation }) {
         placeholder="Search chats..."
         value={searchQuery}
         onChangeText={setSearchQuery}
+        accessibilityLabel="Search chats"
       />
       {filteredChats.length > 0 ? (
         <FlatList
@@ -148,6 +150,7 @@ export default function ChatListScreen({ navigation }) {
           initialNumToRender={10} // Optimization for large data sets
           maxToRenderPerBatch={15}
           windowSize={10}
+          showsVerticalScrollIndicator={false}
         />
       ) : (
         <Text style={styles.noChatsText}>No chats found.</Text>

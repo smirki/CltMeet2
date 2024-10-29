@@ -2,6 +2,7 @@
 const admin = require('firebase-admin');
 const axios = require('axios');
 const readline = require('readline');
+require('dotenv').config({ path: '../.env' });
 
 // Initialize Firebase Admin SDK
 const serviceAccount = require('./serviceAccount.json'); // Update with the path to your serviceAccount.json
@@ -10,7 +11,7 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'YOUR_FIREBASE_API_KEY'; // Replace with your Firebase API key
+const FIREBASE_API_KEY =  process.env.FIREBASE_API_KEY;
 
 // Function to prompt user for email and password
 function promptCredentials() {

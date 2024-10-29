@@ -86,11 +86,20 @@ const EventsScreen = () => {
     applyFilters();
   }, [search, selectedCategory, events]);
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (options = {}) => {
+    const { search = '', type = 'all', sortBy = 'date', order = 'asc', page = 1, limit = 10 } = options;
+    setLoading(true);
     try {
-      const response = await axiosInstance.get('/events');
-      setEvents(response.data.events);
-      setFilteredEvents(response.data.events);
+      const response = await axiosInstance.get('/events', {
+        params: { search, type, sortBy, order, page, limit },
+      });
+      const fetchedEvents = response.data.events;
+      if (page === 1) {
+        setEvents(fetchedEvents);
+      } else {
+        setEvents(prevEvents => [...prevEvents, ...fetchedEvents]);
+      }
+      setFilteredEvents(fetchedEvents);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching events:', error);

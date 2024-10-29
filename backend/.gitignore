@@ -1,6 +1,6 @@
 # Firebase Service Account
 serviceAccount.json
-
+.json
 # Node modules
 node_modules/
 

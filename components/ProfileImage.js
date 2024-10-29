@@ -1,32 +1,26 @@
 // components/ProfileImage.js
+
 import React from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet } from 'react-native';
 
 const ProfileImage = ({ uri, accessibilityLabel }) => {
   return (
-    <View style={styles.imageContainer}>
-      <Image
-        source={{ uri }}
-        style={styles.image}
-        accessibilityLabel={accessibilityLabel}
-        accessible
-      />
-    </View>
+    <Image
+      source={{ uri: uri || 'https://via.placeholder.com/150' }}
+      style={styles.image}
+      accessible={true}
+      accessibilityLabel={accessibilityLabel}
+    />
   );
 };
 
 const styles = StyleSheet.create({
-  imageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    overflow: 'hidden',
-    backgroundColor: '#eee',
-  },
   image: {
-    width: '100%',
-    height: '100%',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#e0e0e0',
   },
 });
 
-export default React.memo(ProfileImage);
+export default ProfileImage;

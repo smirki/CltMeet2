@@ -93,7 +93,11 @@ const MatchesScreen = () => {
 
   const performUnmatch = async (matchId, userName) => {
     try {
-      await axiosInstance.post('/unmatch', { matchId });
+      await axiosInstance.post('/unmatch', { matchId }, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
       Alert.alert('Success', `You have successfully unmatched with ${userName}.`);
       fetchMatches();
     } catch (error) {
@@ -115,7 +119,11 @@ const MatchesScreen = () => {
 
   const performUndoOutgoing = async (matchId, userName) => {
     try {
-      await axiosInstance.post('/undoOutgoing', { matchId });
+      await axiosInstance.delete(`/matchRequests/${matchId}`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
       Alert.alert('Success', `Your request to ${userName} has been canceled.`);
       fetchMatches();
     } catch (error) {
@@ -148,7 +156,11 @@ const MatchesScreen = () => {
 
   const performAccept = async (matchId, userName) => {
     try {
-      await axiosInstance.post('/acceptMatch', { matchId });
+      await axiosInstance.post('/acceptMatch', { matchId }, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
       Alert.alert('Success', `You have accepted the match with ${userName}.`);
       fetchMatches();
     } catch (error) {
@@ -159,7 +171,11 @@ const MatchesScreen = () => {
 
   const performDeny = async (matchId, userName) => {
     try {
-      await axiosInstance.post('/denyMatch', { matchId });
+      await axiosInstance.post('/denyMatch', { matchId }, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
       Alert.alert('Success', `You have denied the match with ${userName}.`);
       fetchMatches();
     } catch (error) {
@@ -176,7 +192,7 @@ const MatchesScreen = () => {
         accessibilityLabel={`Chat with ${item.user.name}`}
         style={styles.matchInfoContainer}
       >
-        <ProfileImage uri={item.user.imageUrl} accessibilityLabel={`${item.user.name}'s profile picture`} />
+        <ProfileImage uri={item.user.mainProfileImage} accessibilityLabel={`${item.user.name}'s profile picture`} />
         <View style={styles.matchDetails}>
           <Text style={styles.userName}>{item.user.name}, {item.user.age}</Text>
           <Tag type={item.type} />
@@ -205,7 +221,7 @@ const MatchesScreen = () => {
         )}
         {section.title === 'Outgoing Matches' && (
           <TouchableOpacity
-            onPress={() => handleUndoOutgoing(item.matchId, item.user.name)}
+            onPress={() => handleUndoOutgoing(item.requestId, item.user.name)}
             style={styles.actionButton}
             accessibilityRole="button"
             accessibilityLabel={`Undo outgoing request to ${item.user.name}`}

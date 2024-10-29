@@ -1,13 +1,12 @@
 // api/axiosInstance.js
 
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { firebase } from '../firebaseConfig'; // Ensure firebase is correctly initialized
 import { Alert } from 'react-native';
 
 // Create Axios instance
 const axiosInstance = axios.create({
-  baseURL: String(process.env.EXPO_PUBLIC_API_URL), // Replace with your backend API URL
+  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000', // Replace with your backend API URL
   headers: {
     'Content-Type': 'application/json',
   },

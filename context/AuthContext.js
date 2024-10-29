@@ -1,7 +1,7 @@
 // context/AuthContext.js
 
 import React, { createContext, useState, useEffect } from 'react';
-import { firebase } from '../firebaseConfig'; // Ensure firebase is correctly initialized
+import { firebase } from '../firebaseConfig'; // Ensure Firebase is correctly initialized
 import * as SecureStore from 'expo-secure-store';
 import axiosInstance from '../api/axiosInstance'; // Ensure the path is correct
 import { Alert } from 'react-native';
@@ -13,30 +13,45 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true); // To handle loading state
 
   useEffect(() => {
-    const unsubscribe = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const idToken = await firebaseUser.getIdToken(true); // Force refresh to get the latest token
-          setUser(firebaseUser);
-          await SecureStore.setItemAsync('userToken', idToken); // Securely store the token
-        } catch (error) {
-          console.error('Error fetching ID token:', error);
-          Alert.alert('Authentication Error', 'Failed to retrieve authentication token.');
+    const initializeAuth = async () => {
+      try {
+        const storedToken = await SecureStore.getItemAsync('userToken');
+        if (storedToken) {
+          // Listen for authentication state changes
+          const unsubscribe = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
+            if (firebaseUser) {
+              setUser(firebaseUser);
+              // Optionally, refresh the token if necessary
+              const idToken = await firebaseUser.getIdToken(true);
+              await SecureStore.setItemAsync('userToken', idToken); // Update stored token
+            } else {
+              await SecureStore.deleteItemAsync('userToken');
+              setUser(null);
+            }
+            setLoading(false);
+          });
+          // Cleanup subscription on unmount
+          return () => unsubscribe();
+        } else {
+          setLoading(false);
         }
-      } else {
-        setUser(null);
-        await SecureStore.deleteItemAsync('userToken'); // Delete token securely
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    };
 
-    return () => unsubscribe();
+    initializeAuth();
   }, []);
 
   // Login function using Firebase Auth
   const login = async (email, password) => {
     try {
-      await firebase.auth().signInWithEmailAndPassword(email, password);
+      const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+      const firebaseUser = userCredential.user;
+      const idToken = await firebaseUser.getIdToken(true); // Force refresh to get the latest token
+      setUser(firebaseUser);
+      await SecureStore.setItemAsync('userToken', idToken); // Securely store the token
     } catch (error) {
       throw error; // Let the calling function handle the error
     }
@@ -63,8 +78,8 @@ export const AuthProvider = ({ children }) => {
         },
       });
 
-      // Optionally, you can set the user state here or rely on onAuthStateChanged
       setUser(firebaseUser);
+      await SecureStore.setItemAsync('userToken', idToken); // Securely store the token
     } catch (error) {
       throw error; // Let the calling function handle the error
     }

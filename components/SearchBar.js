@@ -1,33 +1,19 @@
 // components/SearchBar.js
-import React, { useState, useEffect } from 'react';
+
+import React from 'react';
 import { View, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import debounce from 'lodash.debounce';
 
-const SearchBar = () => {
-  const [searchText, setSearchText] = useState('');
-
-  // Debounce the search input to prevent excessive calls
-  const debouncedSearch = debounce((text) => {
-  }, 300);
-
-  useEffect(() => {
-    debouncedSearch(searchText);
-    // Cancel the debounce on unmount
-    return () => {
-      debouncedSearch.cancel();
-    };
-  }, [searchText]);
-
+const SearchBar = ({ value, onChangeText, placeholder, accessibilityLabel }) => {
   return (
     <View style={styles.container}>
       <Ionicons name="search" size={20} color="#666" style={styles.icon} />
       <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder || 'Search'}
         style={styles.input}
-        placeholder="Search matches..."
-        value={searchText}
-        onChangeText={setSearchText}
-        accessibilityLabel="Search matches"
+        accessibilityLabel={accessibilityLabel || 'Search input'}
       />
     </View>
   );
@@ -36,21 +22,20 @@ const SearchBar = () => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    backgroundColor: '#f1f1f1',
+    borderRadius: 8,
     alignItems: 'center',
-    backgroundColor: '#F2EFEA',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginBottom: 16,
+    paddingHorizontal: 10,
+    marginBottom: 10,
   },
   icon: {
-    marginRight: 8,
+    marginRight: 6,
   },
   input: {
     flex: 1,
+    paddingVertical: 8,
     fontSize: 16,
-    color: '#333',
   },
 });
 
-export default React.memo(SearchBar);
+export default SearchBar;
