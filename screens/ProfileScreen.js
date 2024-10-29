@@ -182,6 +182,14 @@ const ProfileScreen = () => {
     }
   };
 
+  const handleSettingsPress = () => {
+    console.log();
+  }
+
+  const handleLogoutPress = () => {
+    console.log();
+  }
+
   const toggleBottomSheet = (open) => {
     if (open) {
       Animated.timing(slideAnim, {
@@ -238,15 +246,7 @@ const ProfileScreen = () => {
       <Text style={styles.appName}>CltMeet</Text>
 
       {/* Icons section */}
-      <View style={styles.iconsContainer}>
-      <TouchableOpacity style={styles.iconButton} onPress={handleSettingsPress}>
-            <Icon name="sign-out" size={25} color="#e63558" /> {/* Settings icon */}
-          </TouchableOpacity>
 
-          <TouchableOpacity style={styles.iconButton} onPress={handleLogoutPress}>
-            <Icon name="sign-out" size={25} color="#e63558" /> {/* Logout icon */}
-          </TouchableOpacity>
-      </View>
     </View>
 
       <ScrollView contentContainerStyle={styles.container}>
