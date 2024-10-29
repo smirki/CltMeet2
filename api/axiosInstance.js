@@ -1,8 +1,9 @@
 // api/axiosInstance.js
-
 import axios from 'axios';
 import { firebase } from '../firebaseConfig'; // Ensure firebase is correctly initialized
 import { Alert } from 'react-native';
+
+const backend_url = process.env.REACT_APP_SERVER_BASE_URL;
 
 // Create Axios instance
 const axiosInstance = axios.create({
