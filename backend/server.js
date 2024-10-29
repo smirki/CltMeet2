@@ -19,6 +19,9 @@ const redis = require('redis'); // **Redis for Caching**
 const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH || './serviceAccount.json';
 const serviceAccount = require(serviceAccountPath);
 
+require('dotenv').config();  // In backend entry point, e.g., server.js or app.js
+const backend_url = process.env.REACT_APP_SERVER_BASE_URL;
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -187,7 +190,6 @@ app.post('/uploadProfilePictures', verifyToken, upload.single('avatar'), async (
       });
       updatedImages = [...updatedImages];
     }
-
     // Ensure only 5 images are stored
     if (updatedImages.length > 5) {
       updatedImages = updatedImages.slice(-5); // Keep the latest 5
