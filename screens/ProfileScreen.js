@@ -83,7 +83,11 @@ const fetchTicketDetails = async () => {
           Authorization: `Bearer ${user.token}`,
         },
       });
-      setProfileImages(response.data.profileImages || []);
+      const fullImageUrls = (response.data.profileImages || []).map(
+        (image) => `${process.env.EXPO_PUBLIC_API_URL}${image}`
+      );
+      console.log(fullImageUrls);
+      setProfileImages(fullImageUrls || []);
       setMainProfileImage(response.data.mainProfileImage || null);
       setBio(response.data.bio || '');
       setName(response.data.name || '');
@@ -212,9 +216,6 @@ const fetchTicketDetails = async () => {
     try {
       const imageUrl = profileImages[index];
       const response = await axiosInstance.delete('/deleteProfileImage', {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
         data: { imageUrl },
       });
 
@@ -1179,7 +1180,7 @@ ticketsContainer: {
 },
 ticketItem: {
   backgroundColor: '#e8f5e9',
-  padding: 10,
+  padding: 11,
   borderRadius: 10,
   marginVertical:5,
   elevation: 2, // For Android shadow

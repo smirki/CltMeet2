@@ -367,8 +367,7 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#667',
   },
 });
-
 export default MatchesScreen;
