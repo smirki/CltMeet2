@@ -1,36 +1,36 @@
 // App.js
 
-import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import React, { useContext } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { MatchesProvider } from './MatchesContext';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import MainTabs from './screens/MainTabs';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import PaymentMethodScreen from './screens/AddPaymentMethodScreen';
+import { StripeProvider } from '@stripe/stripe-react-native';
+import EventsListScreen from './screens/EventsListScreen'; 
+import PublicProfileScreen from './screens/PublicProfileScreen';
+import MatchesScreen from './screens/MatchesScreen';
+import SplashScreen from './screens/SplashScreen';
+import EventDetailsScreen from './screens/EventDetailsScreen';
 
 const Stack = createNativeStackNavigator();
 
-// Create a separate component to handle navigation based on auth state
+// Separate component to handle navigation based on auth state
 const AppNavigator = () => {
-  const { userToken, loading } = React.useContext(AuthContext);
+  const { user, loading } = useContext(AuthContext);
 
   if (loading) {
-    // Show a loading indicator while checking for token
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#FF3B30" />
-      </View>
-    );
+    return <SplashScreen />;
   }
 
   return (
-    <Stack.Navigator initialRouteName={userToken ? "Main" : "Login"}>
-      {userToken ? (
+    <Stack.Navigator>
+      {user ? (
         <>
           <Stack.Screen
             name="Main"
@@ -42,6 +42,26 @@ const AppNavigator = () => {
             component={ProfileScreen}
             options={{ title: 'Profile' }}
           />
+          <Stack.Screen
+            name="EventDetails"
+            component={EventDetailsScreen}
+          />
+          <Stack.Screen
+            name="Payments"
+            component={PaymentMethodScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EventsList"
+            component={EventsListScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Matches"
+            component={MatchesScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ title: 'User Profile' }} />
         </>
       ) : (
         <>
@@ -53,7 +73,7 @@ const AppNavigator = () => {
           <Stack.Screen
             name="SignUp"
             component={SignUpScreen}
-            options={{ title: 'Sign Up' }}
+            options={{ headerShown: false }}
           />
         </>
       )}
@@ -65,11 +85,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <NavigationContainer>
-          <MatchesProvider>
-            <AppNavigator />
-          </MatchesProvider>
-        </NavigationContainer>
+        <StripeProvider publishableKey="pk_test_51OfniJDtK57hwiI4CY9u4qzBlNrMLx4n86CmF7hSvmcDFwRJje8noHmnWaw8ESybJHZAXWQPvCBdq0Auu8Ey8lbP00fLL5NXkH">
+          <NavigationContainer>
+            <MatchesProvider>
+              <AppNavigator />
+            </MatchesProvider>
+          </NavigationContainer>
+        </StripeProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );
