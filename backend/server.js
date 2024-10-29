@@ -6,7 +6,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
-require('dotenv').config(); // Load environment variables
+require('dotenv').config(); // Load environment variables     
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs');
@@ -15,7 +15,7 @@ const morgan = require('morgan'); // HTTP request logger
 const helmet = require('helmet'); // Security middleware
 const rateLimit = require('express-rate-limit'); // Rate limiting
 
-const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH || './serviceAccount.json';
+const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH || './serviceAccount.json';    
 const serviceAccount = require(serviceAccountPath);
 
 admin.initializeApp({
